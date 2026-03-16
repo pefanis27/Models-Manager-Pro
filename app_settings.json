@@ -1,0 +1,11 @@
+{
+  "train_model": "yolov8n",
+  "train_dataset": "coco128",
+  "train_imgsz": "224",
+  "train_device": "GPU",
+  "train_epochs": 10,
+  "train_patience": 5,
+  "camera_index": 0,
+  "camera_conf": 25,
+  "camera_tensorrt": false
+}
