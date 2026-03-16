@@ -1,0 +1,197 @@
+======================================================
+       🤖  Models Manager Pro A.I Copilot  🤖
+======================================================
+  📦 Έκδοση   : 4.0
+  👤 Δημιουργός : Ευάγγελος Πεφάνης
+  © 2026
+======================================================
+
+
+[ 📌 ΤΙ ΕΙΝΑΙ ]
+------------------------------------------------------
+Το Models Manager Pro A.I Copilot είναι ένα ολοκληρωμένο
+περιβάλλον διαχείρισης, εκπαίδευσης, εξαγωγής, αξιολόγησης
+και live χρήσης μοντέλων Τεχνητής Νοημοσύνης.
+
+Υποστηρίζει πλήρως:
+- YOLO detection (v5–v12) & YOLO classification (-cls)
+- CNN torchvision: MobileNet V2, V3 Small/Large, ResNet-50/101
+- Backends: PyTorch (.pt), ONNX (.onnx), TensorRT (.engine), NCNN
+
+Ιδανικό για:
+- 🎓 Εκπαιδευτικούς & φοιτητές
+- 🧪 Ερευνητές & data scientists
+- 🤖 Χρήστες που πειραματίζονται με AI / Computer Vision
+
+
+[ 🤖 A.I COPILOT ]
+------------------------------------------------------
+Ο A.I Copilot (μέσω Groq API / LLM) είναι ο έξυπνος
+"συνοδηγός" σου στην εκπαίδευση μοντέλων:
+
+- Προτείνει αρχικές ρυθμίσεις υπερπαραμέτρων (epochs,
+  batch size, LR, optimizer κ.λπ.) ανάλογα με το dataset
+- Βελτιώνει αυτόματα ρυθμίσεις βάσει της τελευταίας
+  εκπαίδευσης ή των Στατιστικών Ανίχνευσης
+- Εφαρμόζει τις αλλαγές απευθείας στο Training Tab
+  με σήμανση 🤖 στα τροποποιημένα πεδία
+- Υποστηρίζει streaming απόκρισης, ιστορικό συνομιλίας,
+  παραμετροποιήσιμο system prompt και επιλογή γλώσσας
+
+
+[ ⭐ ΚΑΡΤΕΛΕΣ & ΔΥΝΑΤΟΤΗΤΕΣ ]
+------------------------------------------------------
+
+🏠 ΠΙΝΑΚΑΣ ΕΛΕΓΧΟΥ
+  - Live παρακολούθηση CPU, RAM και GPU (ανανέωση κάθε 2 δλ.)
+  - Κάρτες κατάστασης: ΛΣ, Python, PyTorch, Ultralytics,
+    TensorRT, Triton, TorchInductor, PySide6
+  - Γρήγορες συντομεύσεις πλοήγησης σε όλα τα tabs
+  - Φόρμα Diagnostics με πλήρεις πληροφορίες συστήματος
+  - Εναλλαγή Light / Dark theme
+
+🎓 ΕΚΠΑΙΔΕΥΣΗ ΜΟΝΤΕΛΟΥ
+  - YOLO detection (v5–v12), YOLO classification (-cls) και
+    CNN torchvision (MobileNet V2/V3, ResNet-50/101)
+  - Πλήρης ρύθμιση: epochs, batch, imgsz, optimizer, LR,
+    momentum, weight decay, workers, patience
+  - Υποστήριξη TorchInductor / Triton (3 compile modes)
+  - Αυτόματη ανίχνευση CPU / GPU, live progress bar & log
+  - Εξαγωγή σε ONNX, TensorRT (.engine), NCNN & CNN→ONNX
+  - Αυτόματη δημιουργία PDF Training Report (loss/accuracy
+    curves, LR, results.png) — ξεχωριστή μορφή ανά τύπο
+
+🤖 A.I COPILOT ΕΚΠΑΙΔΕΥΣΗΣ
+  - 3 λειτουργίες: Πρόταση αρχικών / Βελτίωση βάσει training
+    / Βελτίωση βάσει Στατιστικών Ανίχνευσης
+  - Αυτόματη εφαρμογή YAML config στο Training Tab
+  - Streaming απόκρισης, ιστορικό, επιλογή LLM μοντέλου
+
+📷 LIVE ΑΝΙΧΝΕΥΣΗ (Κάμερα)
+  - Real-time detection & classification από κάμερα ή video
+  - Backends: PyTorch, ONNX, NCNN, TensorRT
+  - Πλήρης υποστήριξη CNN (top-5 predictions + confidence bars)
+  - Ρύθμιση conf threshold, imgsz, camera index
+  - FPS overlay, EMA inference time, auto-recover σε αποσύνδεση
+  - Classes filter, αποθήκευση annotated frames/video
+
+🎬 VIDEO INFERENCE
+  - Frame-by-frame επεξεργασία βίντεο αρχείου (mp4/avi/mov κ.ά.)
+  - Annotation, progress bar, live preview
+  - Εξαγωγή annotated βίντεο ή individual frames
+  - Ρύθμιση conf, imgsz, επιλογή κλάσεων
+
+⚡ BENCHMARK FPS (Offline)
+  - Αυτόματο benchmark PyTorch / ONNX / TensorRT / NCNN
+    σε ασφαλές subprocess (αποφυγή DLL/driver crashes)
+  - Μετρήσεις FPS, ms/εικόνα, ρυθμιζόμενα warmup & runs
+  - Σύγκριση όλων των backends σε έναν πίνακα
+  - Ειδική διαχείριση CNN μοντέλων (torchvision)
+
+🎥 BENCHMARK ΚΑΜΕΡΑΣ (Live)
+  - Μέτρηση πραγματικού FPS από live κάμερα για κάθε backend
+  - Επιλογή imgsz, duration, conf/iou thresholds
+  - Αναλυτικό log ανά backend με EMA FPS
+  - Πίνακας σύγκρισης αποτελεσμάτων, κατάταξη με 🥇🥈🥉
+
+📊 ΣΤΑΤΙΣΤΙΚΑ ΑΝΙΧΝΕΥΣΗΣ
+  - Batch ανάλυση dataset εικόνων (έως 500) με οποιοδήποτε
+    μοντέλο (YOLO-det / YOLO-cls / CNN / ONNX)
+  - Per-class counts, mean confidence, inference time,
+    confidence histogram
+  - Preview annotated εικόνων, εμφάνιση ground truth
+  - Εξαγωγή PDF Detection Report (cover, metrics, charts)
+  - Άμεση τροφοδότηση αποτελεσμάτων στον A.I Copilot
+
+📊 ΣΥΓΚΡΙΣΗ ΕΚΠΑΙΔΕΥΣΕΩΝ ΜΟΝΤΕΛΩΝ
+  - Ενιαίο παράθυρο με 4 tabs για όλες τις αποθηκευμένες
+    εκπαιδεύσεις (YOLO-det / YOLO-cls / CNN)
+
+  📋 Tab Πίνακας:
+    - 18 στήλες: mAP50, mAP50-95, Precision, Recall,
+      Top-1/5 Accuracy, Train/Val Loss, Optimizer, Batch,
+      Χρόνος, Ημερομηνία κ.ά.
+    - Χρωματισμός κελιών (🟢 ≥0.85 / 🟡 ≥0.70 / 🔴 <0.70)
+    - Φίλτρο αναζήτησης, multi-selection, εξαγωγή CSV
+
+  📈 Tab Γραφικές (7 διαδραστικά διαγράμματα):
+    - mAP50/Top-1 bar chart
+    - Precision & Recall grouped bars
+    - Train/Val Loss comparison
+    - Precision vs Recall scatter
+    - Χρόνος εκπαίδευσης ανά μοντέλο
+    - Radar chart (6 axes: mAP50/95, Precision, Recall, Top-1/5)
+    - Εποχές vs Καλύτερο Metric scatter
+
+  📉 Tab Καμπύλες Εκπαίδευσης:
+    - Loss curves, Accuracy/mAP per epoch, Learning Rate
+
+  🏆 Tab Καλύτερο Μοντέλο:
+    - Αυτόματη σύσταση νικητή σε 7 κατηγορίες
+      (mAP50, mAP50-95, Top-1, F1, Ταχύτητα, Val Loss,
+       Συνολική σταθμισμένη βαθμολογία)
+
+📄 PDF ΑΝΑΦΟΡΕΣ & LOGGING
+  - PDF Training Report: Loss curves, mAP, LR, results.png
+    (ξεχωριστό format για YOLO-det / YOLO-cls / CNN)
+  - PDF Detection Report: cover, πίνακας metrics, per-class
+    πίνακας, charts confidence/inference time
+  - Αρχεία log ανά εκτέλεση, crash logs με full traceback
+    + thread dump, faulthandler για native crashes
+
+
+[ 📂 ΠΟΥ ΑΠΟΘΗΚΕΥΟΝΤΑΙ ΤΑ ΔΕΔΟΜΕΝΑ ]
+------------------------------------------------------
+Η εγκατάσταση γίνεται στον φάκελο χρήστη:
+
+  📁 C:\Users\<Όνομα_Χρήστη>\Models_Manager_Pro_A.I_Copilot\
+
+Εκεί αποθηκεύονται τα δυναμικά δεδομένα της εφαρμογής.
+
+Ενδεικτικοί υποφάκελοι:
+  - 📁 Data_Sets\
+  - 📁 Trained_Models\          (μοντέλα + metrics ανά εκτέλεση)
+  - 📁 Train_Reports\           (PDF αναφορές εκπαίδευσης)
+  - 📁 Detection_Reports\       (PDF αναφορές ανίχνευσης)
+  - 📁 _stats_preview\          (preview εικόνες Στατιστικών)
+  - 📁 Crash_Logs\              (αρχεία crash για debugging)
+
+
+[ 🔧 ΑΠΑΙΤΗΣΕΙΣ ΛΟΓΙΣΜΙΚΟΥ ]
+------------------------------------------------------
+  - Python 3.12
+  - PyTorch + torchvision (CPU ή CUDA)
+  - Ultralytics (YOLO)
+  - OpenCV (opencv-python)
+  - PySide6 (GUI)
+  - ONNX Runtime (onnxruntime)
+  - ReportLab + Pillow (PDF αναφορές)
+  - psutil (monitoring πόρων)
+  - Προαιρετικά: TensorRT, Triton, onnx, onnxsim
+
+
+[ 🔗 ΥΠΟΣΤΗΡΙΞΗ & ΕΝΗΜΕΡΩΣΕΙΣ ]
+------------------------------------------------------
+🌐 Ιστοσελίδα δημιουργού:
+  https://www.ece.uop.gr/staff/pefanis-evangelos/
+
+📘 Υποστήριξη / υλικό & αρχεία:
+  https://drive.google.com/drive/folders/1pE0NsK0Esp4PONPlcZVKLM28OvIG9ovO
+
+📥 Ενημερώσεις εφαρμογής (updates):
+  https://github.com/pefanis27/Models-Manager-Pro
+
+
+[ 🖥️ ΑΠΑΙΤΗΣΕΙΣ ΣΥΣΤΗΜΑΤΟΣ ]
+------------------------------------------------------
+  - 💻 Windows 10 ή νεότερο (64-bit)
+  - 🧮 Σύγχρονος επεξεργαστής (πολυπύρηνος προτείνεται)
+  - 💠 Προαιρετικά: GPU NVIDIA με CUDA για επιταχυνόμενο
+       training και TensorRT inference
+  - 💾 Ελεύθερος χώρος δίσκου ανάλογα με datasets & μοντέλα
+
+
+[ 🙏 ΕΥΧΑΡΙΣΤΙΕΣ ]
+------------------------------------------------------
+Σας ευχαριστώ που εγκαταστήσατε το
+"Models Manager Pro A.I Copilot" ✨
