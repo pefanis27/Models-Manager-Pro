@@ -1,6 +1,7 @@
 # Models-Manager-Pro V 4.0
 Models Manager Pro v4.0 (A.I. Copilot Edition) is a unified desktop platform designed for the complete management of YOLO (v5–v12) and CNN (torchvision) computer vision models
-. Built using the PySide6 framework, the application provides a modern graphical interface for handling the entire machine learning pipeline, from training and optimization to live deployment and statistical analysis
+. Built using the PySide6 framework, the application provides a modern graphical interface for handling the entire machine learning pipeline, from training and optimization to live deployment and statistical analysis.
+Video demo of the new application under development in version 6.0 : https://drive.google.com/file/d/1OLzDfJ-37BzTueEmlOBkmEvD1N-RV-qM/view?usp=sharing
 ![Models_Manager_Pro_V_4_0](Models_Manager_Pro_V_4_0.png)
 1. Comprehensive Model Support
 The application supports a wide range of architectures:
