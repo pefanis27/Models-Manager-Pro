@@ -1,7 +1,7 @@
 ======================================================
        🤖  Models Manager Pro A.I Copilot  🤖
 ======================================================
-  📦 Έκδοση   : 4.0
+  📦 Έκδοση   : 6.0
   👤 Δημιουργός : Ευάγγελος Πεφάνης
   © 2026
 ======================================================
@@ -179,7 +179,7 @@
   https://drive.google.com/drive/folders/1pE0NsK0Esp4PONPlcZVKLM28OvIG9ovO
 
 📥 Ενημερώσεις εφαρμογής (updates):
-  https://github.com/pefanis27/Models-Manager-Pro
+  https://github.com/pefanis27/Models-Manager-Pro/tree/main
 
 
 [ 🖥️ ΑΠΑΙΤΗΣΕΙΣ ΣΥΣΤΗΜΑΤΟΣ ]
