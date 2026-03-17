@@ -4,7 +4,7 @@ The application Models Manager Pro v6.0 (A.I Copilot Edition), developed by Evan
 
 Video demo of the new application under development in version 6.0 : https://www.youtube.com/watch?v=HTlH3BLU2vs&t=78s
 
-Download full installer (Gr) : https://drive.google.com/drive/folders/1xwbmnDQUMtQ8GQ4V4YCGaooR3rWilzLl?usp=drive_link
+Download full installer (Gr) (.exe file in .zip) : https://drive.google.com/drive/folders/1xwbmnDQUMtQ8GQ4V4YCGaooR3rWilzLl?usp=drive_link
 
 ![banner_v_6](banner_v_6.png)
 The application Models Manager Pro v6.0 (A.I Copilot Edition), developed by Evangelos Pefanis, is an advanced and comprehensive environment for training, managing, and evaluating artificial intelligence models
@@ -143,4 +143,4 @@ Splash Screen: Δυναμική οθόνη εκκίνησης με animations κ
 .
 Προσβασιμότητα: Εργαλεία ζουμ γραμματοσειράς, πλήρη υποστήριξη συντομεύσεων πληκτρολογίου και live dashboard παρακολούθησης πόρων συστήματος
 
-7. Λήψη πλήρους προγράμματος εγκατάστασης: https://drive.google.com/drive/folders/1xwbmnDQUMtQ8GQ4V4YCGaooR3rWilzLl?usp=drive_link
+7. Λήψη πλήρους προγράμματος εγκατάστασης (.exe file in .zip): https://drive.google.com/drive/folders/1xwbmnDQUMtQ8GQ4V4YCGaooR3rWilzLl?usp=drive_link
