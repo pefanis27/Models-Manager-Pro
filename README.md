@@ -2,7 +2,7 @@
 The application Models Manager Pro v6.0 (A.I Copilot Edition), developed by Evangelos Pefanis, is an advanced and comprehensive environment for training, managing, and evaluating artificial intelligence models
 . It is highly optimized for the YOLO (v5 through v12) architectures and CNN Classifiers from torchvision, providing full support for Python 3.12 and modern libraries like PyTorch, Ultralytics, and PySide6
 
-Video demo of the new application under development in version 6.0 : https://drive.google.com/file/d/1OLzDfJ-37BzTueEmlOBkmEvD1N-RV-qM/view?usp=sharing
+Video demo of the new application under development in version 6.0 : https://www.youtube.com/watch?v=HTlH3BLU2vs&t=78s
 
 Download full installer: under development
 
