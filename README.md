@@ -1,101 +1,146 @@
-# Models-Manager-Pro v4.0
-Models Manager Pro v4.0 (A.I. Copilot Edition) is a unified desktop platform designed for the complete management of YOLO (v5–v12) and CNN (torchvision) computer vision models
-. Built using the PySide6 framework, the application provides a modern graphical interface for handling the entire machine learning pipeline, from training and optimization to live deployment and statistical analysis.
+# Models-Manager-Pro v6.0
+The application Models Manager Pro v6.0 (A.I Copilot Edition), developed by Evangelos Pefanis, is an advanced and comprehensive environment for training, managing, and evaluating artificial intelligence models
+. It is highly optimized for the YOLO (v5 through v12) architectures and CNN Classifiers from torchvision, providing full support for Python 3.12 and modern libraries like PyTorch, Ultralytics, and PySide6
+
 Video demo of the new application under development in version 6.0 : https://drive.google.com/file/d/1OLzDfJ-37BzTueEmlOBkmEvD1N-RV-qM/view?usp=sharing
+
+Download full installer: https://drive.google.com/drive/folders/1gC3sIyvGoJoRG75GcNWAmV5UnfHskoXg?usp=drive_link
+
 ![Models_Manager_Pro_V_4_0](Models_Manager_Pro_V_4_0.png)
-1. Comprehensive Model Support
-The application supports a wide range of architectures:
-YOLO Models: Full integration with the Ultralytics library for Object Detection and Classification, supporting versions from v5 up to v12
+The application Models Manager Pro v6.0 (A.I Copilot Edition), developed by Evangelos Pefanis, is an advanced and comprehensive environment for training, managing, and evaluating artificial intelligence models
+. It is highly optimized for the YOLO (v5 through v12) architectures and CNN Classifiers from torchvision, providing full support for Python 3.12 and modern libraries like PyTorch, Ultralytics, and PySide6
 .
-CNN Classifiers: Support for torchvision architectures, specifically MobileNet V2/V3 (Small and Large) and ResNet-50/101, using a native PyTorch training loop
+Below is the detailed description of the application's capabilities by category:
+1. Model Management and Training
+The application covers the entire model life cycle, from data preparation to final reporting:
+Supported Models: Includes all versions of YOLO (Detection & Classification) and popular CNN models such as MobileNet V2/V3 (Small/Large) and ResNet-50/101
 .
-2. Advanced Training & Optimization
-Training is highly customizable, allowing users to configure epochs, batch size, image size, and specific optimizers like Adam, AdamW, and SGD
+Dataset Management: Features tools for the automatic download and preparation of well-known datasets like COCO (~20GB including images and labels), as well as support for custom ImageFolder structures
 .
-Triton Acceleration: For YOLO models on GPU, the app supports TorchInductor/Triton compilation with modes like "reduce-overhead" and "max-autotune" to significantly speed up training
+Full Customization: Users have absolute control over hyperparameters, including epochs, batch size, image size (ranging from 160 to 1920px), optimizers (SGD, Adam, AdamW), learning rate, momentum, weight decay, and the number of workers
 .
-A.I. Copilot: An intelligent assistant powered by the Groq LLM API analyzes training logs and hardware environment to suggest optimized hyperparameters
+Training Optimization: Integrates TorchInductor/Triton technology to accelerate training on NVIDIA GPUs through compilation, offering three modes: Default, Reduce-overhead, and Max-autotune
 .
-Dataset Management: It includes automatic dataset scanning and supports both YAML-based detection datasets and ImageFolder structures for classification
+Automation: Includes an Early Stopping (patience) system to prevent overfitting and automatically saves both the "best" and "last" models
 .
-3. Multi-Backend Exporting
-Models can be exported into various high-performance formats to suit different deployment needs:
-ONNX: Industry-standard format for cross-platform inference
-.
-TensorRT (.engine): Optimized for NVIDIA GPUs with built-in signature management for reliable caching and validation
-.
-NCNN: Specifically for mobile and edge device deployment
-.
-4. Real-time Inference & Benchmarking
-Live Camera Detection: Provides real-time inference from camera streams with specialized overlays, including confidence bars and rank badges for CNN classifications
-.
-Video File Inference: Allows frame-by-frame processing of video files (mp4, avi, etc.) with the option to save annotated outputs
-.
-Automated Benchmarking: Includes dedicated tools to measure and compare the FPS and latency of different backends (PyTorch, ONNX, TensorRT, NCNN) on the user's specific hardware
-.
-5. Evaluation & Comparative Analysis
-Professional PDF Reports: Automatically generates detailed training and detection reports featuring Matplotlib charts for loss curves, accuracy/mAP progression, and class distribution
-.
-Comparison Dialog: A sophisticated analysis tool that compares multiple training runs using radar charts and ranking systems to recommend the "Best Model" based on seven distinct performance criteria
-.
-6. System Stability & Diagnostics
-Resource Monitoring: Real-time tracking of CPU, RAM, and GPU usage
-.
-Robust Logging: Features advanced error handling, crash logs with full thread dumps, and a Python faulthandler for capturing low-level system crashes
-.
-UI Features: Supports Light/Dark theme toggling and adaptive UI scaling for different screen resolutions.
-
-7.  Download full Installer: https://drive.google.com/drive/folders/1gC3sIyvGoJoRG75GcNWAmV5UnfHskoXg?usp=drive_link
-
-# Models-Manager-Pro v4.0 (Greek)
-![Project_Manager_Pro_Ver_6_0](Project_Manager_Pro_Ver_6_0.png)
-Το Models Manager Pro v4.0 (A.I. Copilot Edition), δημιουργία του Πεφάνη Ευάγγελου, αποτελεί μια ολοκληρωμένη desktop εφαρμογή για την πλήρη διαχείριση του κύκλου ζωής μοντέλων YOLO (v5–v12) και CNN (torchvision)
-. Αναπτυγμένη με το framework PySide6, προσφέρει ένα σύγχρονο περιβάλλον εργασίας για την εκπαίδευση, βελτιστοποίηση, ανάλυση και ζωντανή χρήση μοντέλων υπολογιστικής όρασης
-.
-Ακολουθεί η αναλυτική περιγραφή των δυνατοτήτων της εφαρμογής:
-1. Υποστήριξη Μοντέλων & Αρχιτεκτονικών
-Μοντέλα YOLO: Πλήρης ενσωμάτωση της βιβλιοθήκης Ultralytics για ανίχνευση αντικειμένων (Object Detection) και ταξινόμηση (Classification), υποστηρίζοντας όλες τις εκδόσεις από v5 έως v12
-.
-Μοντέλα CNN (Classification): Υποστήριξη αρχιτεκτονικών του torchvision, όπως MobileNet V2/V3 (Small/Large) και ResNet-50/101, μέσω ενός native PyTorch training loop
-.
-2. Προηγμένη Εκπαίδευση & Βελτιστοποίηση
-Πλήρης Παραμετροποίηση: Ρύθμιση υπερπαραμέτρων όπως εποχές (epochs), batch size, imgsz, optimizer (Adam, AdamW, SGD), ρυθμός μάθησης (LR), momentum και weight decay
-.
-Επιτάχυνση Triton: Υποστήριξη του TorchInductor/Triton για μοντέλα YOLO σε GPU, με λειτουργίες όπως «Μείωση επιβάρυνσης» (reduce-overhead) και «Μέγιστος αυτόματος συντονισμός» (max-autotune) για σημαντική αύξηση της ταχύτητας εκπαίδευσης
-.
-A.I. Copilot: Ένας έξυπνος βοηθός βασισμένος στο Groq LLM API, ο οποίος αναλύει τα logs εκπαίδευσης και το hardware του χρήστη για να προτείνει και να εφαρμόζει αυτόματα βελτιστοποιημένες ρυθμίσεις
-.
-Διαχείριση Datasets: Αυτόματη σάρωση καταλόγων, υποστήριξη αρχείων YAML (YOLO) και δομής ImageFolder (CNN)
-.
-3. Εξαγωγή Μοντέλων (Multi-Backend Export)
-Η εφαρμογή επιτρέπει την εξαγωγή μοντέλων σε μορφές υψηλής απόδοσης
+2. A.I Copilot (Artificial Intelligence)
+Through the integration of the Groq API (LLM), the application offers an intelligent assistant that operates on three levels
 :
-ONNX: Το βιομηχανικό πρότυπο για inference σε διάφορες πλατφόρμες.
-TensorRT (.engine): Μέγιστη βελτιστοποίηση για κάρτες NVIDIA, με ενσωματωμένο σύστημα signatures για αξιόπιστη διαχείριση της cache
+Setting Suggestions: Proposes optimal initial parameters based on a user's description of their goal (e.g., "maximum accuracy" or "real-time speed")
 .
-NCNN: Ειδικά σχεδιασμένο για χρήση σε mobile και edge συσκευές
+Training Improvement: Analyzes logs and metrics from the last training run to suggest corrective actions
 .
-4. Inference & Benchmarking σε Πραγματικό Χρόνο
-Live Ανίχνευση: Χρήση κάμερας με στόχο τα 1080p και προηγμένα overlays. Στα CNN μοντέλα εμφανίζονται rank badges και μπάρες εμπιστοσύνης (confidence bars)
+Detection Improvement: Utilizes detection statistics results to propose new training configurations
 .
-Video Inference: Επεξεργασία αρχείων βίντεο (mp4, avi κ.λπ.) frame-by-frame με δυνατότητα αποθήκευσης του αποτελέσματος με annotations
+Immediate Application: The AI generates YAML configurations that can be automatically applied to the application's fields, marking changes with a 🤖 icon
 .
-Auto-Benchmark: Ειδικά εργαλεία για τη μέτρηση των FPS και της καθυστέρησης (latency) σε όλα τα backends (PyTorch, ONNX, TensorRT, NCNN) πάνω στο υλικό του χρήστη
+3. Live Detection and Video Inference
+Live Camera: Performs real-time detection and classification from a camera (targeting 1080p resolution) with support for multiple backends: PyTorch, ONNX, NCNN, and TensorRT (.engine)
 .
-5. Αξιολόγηση & Συγκριτική Ανάλυση
-Επαγγελματικές PDF Αναφορές: Αυτόματη παραγωγή αναλυτικών αναφορών εκπαίδευσης και ανίχνευσης με γραφήματα Matplotlib (Loss curves, Accuracy/mAP progression, Class distribution)
+Video Inference: Processes video files (mp4, avi, mov, etc.) with the ability to save the annotated result or individual frames
 .
-Διάλογος Σύγκρισης: Εργαλείο που αντιπαραβάλλει πολλαπλές εκπαιδεύσεις μέσω radar charts και βαθμολογεί τα μοντέλα βάσει 7 κριτηρίων για την ανάδειξη του «Καλύτερου Μοντέλου»
+Specialized Overlay: For CNN models, it displays a dedicated panel showing the top-5 predictions with confidence bars and color coding, which scales automatically based on the frame resolution
 .
-Στατιστικά Ανίχνευσης: Batch ανάλυση συνόλων εικόνων (έως 500) για τον εντοπισμό προβληματικών κλάσεων και τον υπολογισμό μέσου confidence και χρόνου inference
+Classes Filter: Provides the ability to filter which classes are displayed on the screen
 .
-6. Σταθερότητα Συστήματος & Διαγνωστικά
-Παρακολούθηση Πόρων: Live καταγραφή της χρήσης CPU, RAM και GPU στην αρχική οθόνη
+4. Evaluation and Analytics
+Detection Statistics: Conducts batch analysis of images (up to 500) to calculate class distribution, average confidence, and inference times per image, generating detailed PDF reports
 .
-Διαγνωστικά Utilities: Φόρμα που συγκεντρώνει πληροφορίες για το περιβάλλον συστήματος, τις εκδόσεις των βιβλιοθηκών και τη διαθεσιμότητα CUDA, με δυνατότητα εξαγωγής σε ZIP για troubleshooting
+Training Comparison: A specialized dialog for comparing runs that includes:
+Metrics Table: 18 columns with performance-based cell coloring (green/amber/red)
 .
-Theme & UI: Υποστήριξη Light/Dark theme και adaptive scaling για διαφορετικές αναλύσεις οθόνης
+Interactive Charts: 11 types of charts (Radar profile, F1-Score bars, Precision-Recall scatter, Loss curves, and Model Efficiency)
 .
-Crash Safety: Εξελιγμένο σύστημα καταγραφής crash logs (με thread dump) και χρήση faulthandler για τον εντοπισμό σφαλμάτων σε επίπεδο C.
+Best Model Highlighting: Automatically recommends a "winner" across 10 categories (e.g., Highest mAP50, Best Efficiency, Lowest Overfitting Index)
 .
+5. Export and Reporting
+Model Export: Converts PyTorch models (.pt) into ONNX, TensorRT (for maximum speed on NVIDIA GPUs), and NCNN (for mobile/edge devices), while automatically creating metadata JSON files
+.
+Professional PDF Reports: Generates rich reports including cover pages, metrics tables, loss/accuracy curves, and detection samples, featuring improved typography and emoji-labeled section headers
+.
+6. User Interface and System Tools
+Modern UI: A GitHub-inspired design with full support for Dark and Light themes (Arctic Cyber and Cyber Noir) and font zoom capabilities
+.
+Monitoring: Provides live tracking of CPU, RAM, and GPU VRAM consumption in the status bar
+.
+Diagnostics: A tool that collects complete system information and exports it to a ZIP file for troubleshooting
+.
+Safety and Stability: Features an automatic Crash Log system (with thread dumps), an integrated faulthandler for C-level errors, and smart GPU/CPU memory cleanup utilities
+.
+System Tray: An icon in the notification area for quick access and status updates
+.
+
+# Models-Manager-Pro v6.0 (Greek)
+![Project_Manager_Pro_Ver_6_0](Project_Manager_Pro_Ver_6_0.png)
+Η εφαρμογή Models Manager Pro v6.0 (A.I Copilot Edition), δημιουργία του Ευάγγελου Πεφάνη (2026), αποτελεί ένα προηγμένο και ολοκληρωμένο οικοσύστημα για τη διαχείριση του πλήρους κύκλου ζωής μοντέλων Τεχνητής Νοημοσύνης
+. Σχεδιασμένη για να γεφυρώσει το χάσμα μεταξύ της έρευνας και της παραγωγικής εφαρμογής, η έκδοση 6.0 ενσωματώνει τεχνολογίες αιχμής για την εκπαίδευση, τη βελτιστοποίηση και την ανάπτυξη μοντέλων σε πραγματικές συνθήκες
+.
+Ακολουθεί η αναλυτική έκθεση των προδιαγραφών, των δυνατοτήτων και των υποσυστημάτων της εφαρμογής:
+1. Τεχνική Στοίβα και Αρχιτεκτονική
+Η εφαρμογή βασίζεται σε ένα σύγχρονο τεχνολογικό υπόβαθρο που εξασφαλίζει μέγιστη απόδοση και συμβατότητα:
+Γλώσσα και Frameworks: Αναπτυγμένη σε Python 3.12 με γραφικό περιβάλλον PySide6 (Qt6)
+.
+Πυρήνας Μηχανικής Μάθησης: Χρησιμοποιεί τα frameworks PyTorch και torchvision για τη διαχείριση των νευρωνικών δικτύων
+.
+Υποστηριζόμενα Μοντέλα:
+YOLO (Ultralytics): Πλήρης υποστήριξη όλων των εκδόσεων από v5 έως και την ολοκαίνουργια v12 για εργασίες ανίχνευσης (Detection) και ταξινόμησης (Classification)
+.
+CNN Ταξινομητές: Ενσωματωμένη υποστήριξη για αρχιτεκτονικές όπως MobileNet V2/V3 (Small/Large) και ResNet-50/101
+.
+Διαχείριση Νημάτων (Thread Isolation): Οι βαριές διεργασίες (εκπαίδευση, εξαγωγή, ανάλυση) εκτελούνται σε απομονωμένα νήματα, διατηρώντας τη διεπαφή χρήστη (GUI) 100% αποκρίσιμη
+.
+2. Υποσύστημα Εκπαίδευσης και Βελτιστοποίησης Υλικού
+Το υποσύστημα αυτό επιτρέπει τον πλήρη έλεγχο της διαδικασίας δημιουργίας ενός μοντέλου:
+Παραμετροποίηση: Έλεγχος όλων των κρίσιμων υπερπαραμέτρων, όπως batch size, epochs, image size, ρυθμός μάθησης (LR), optimizer (SGD, Adam, AdamW), momentum και weight decay
+.
+Τεχνολογία Triton / TorchInductor: Υποστηρίζει compile-time βελτιστοποίηση για μοντέλα YOLO σε κάρτες NVIDIA, προσφέροντας τρεις καταστάσεις λειτουργίας: Προεπιλογή, Μείωση επιβάρυνσης (reduce-overhead) και Μέγιστος αυτόματος συντονισμός (max-autotune)
+.
+Αυτόματη Διαχείριση Datasets: Σαρώνει αυτόματα τους φακέλους δεδομένων, υποστηρίζει πρότυπα όπως το COCO και διενεργεί ελέγχους εγκυρότητας στα αρχεία ετικετών (labels)
+.
+3. A.I Copilot: Έξυπνος Βοηθός Εκπαίδευσης
+Πρόκειται για το πλέον καινοτόμο τμήμα της εφαρμογής, το οποίο λειτουργεί ως "προσωπικός MLOps Engineer":
+Διασύνδεση LLM: Χρησιμοποιεί το Groq API για πρόσβαση σε Large Language Models (όπως Llama-3 ή Kimi)
+.
+Έξυπνες Προτάσεις: Αναλύει το hardware του χρήστη, τις τρέχουσες ρυθμίσεις και τα αποτελέσματα προηγούμενων εκπαιδεύσεων για να προτείνει βέλτιστες παραμέτρους
+.
+Αυτοματοποίηση: Δημιουργεί αυτόματα μπλοκ ρυθμίσεων (YAML) και τα εφαρμόζει απευθείας στα πεδία της φόρμας εκπαίδευσης με ένα κλικ
+.
+4. Υποσύστημα Εξαγωγής και Deployment
+Η εφαρμογή προσφέρει ένα πλήρες pipeline μετατροπής των μοντέλων για χρήση σε διαφορετικές πλατφόρμες
+:
+ONNX (.onnx): Για γενική χρήση σε CPU και GPU μέσω του ONNX Runtime
+.
+TensorRT (.engine): Η απόλυτη επιλογή για μέγιστη ταχύτητα σε NVIDIA GPUs, με υποστήριξη FP16 precision και αυτόματο σύστημα διαχείρισης cache για αποφυγή επαναλαμβανόμενων χρονοβόρων builds
+.
+NCNN: Βελτιστοποιημένη εξαγωγή για mobile και embedded συσκευές (ARM NEON optimized), επιτρέποντας την εκτέλεση μοντέλων χωρίς εξαρτήσεις από Python ή PyTorch
+.
+5. Live Ανίχνευση και Video Inference
+Real-Time Inference: Υποστηρίζει ζωντανή ροή από κάμερα με ταχύτητες έως και 60 FPS, χρησιμοποιώντας βελτιστοποιημένα backends (DSHOW/MSMF) για Windows
+.
+Adaptive Overlay: Διαθέτει ένα εξελιγμένο οπτικό επίπεδο (overlay) με badges κλάσεων και μπάρες εμπιστοσύνης (confidence bars) που προσαρμόζονται αυτόματα στην ανάλυση της εικόνας
+.
+Επεξεργασία Βίντεο: Δυνατότητα frame-by-frame επεξεργασίας αρχείων βίντεο (mp4, avi, κ.λπ.) με αυτόματη αποθήκευση των αποτελεσμάτων
+.
+6. Αξιολόγηση, Στατιστική Ανάλυση και Benchmarking
+Batch Analysis: Δυνατότητα ανάλυσης έως και 500 εικόνων ενός dataset για την εξαγωγή αναλυτικών μετρικών ανά κλάση (True Positives, False Positives, μέσο confidence)
+.
+Benchmarking Suite: Περιλαμβάνει στατικό benchmark (offline) για σύγκριση ταχύτητας μεταξύ backends και benchmark κάμερας (live) για μέτρηση FPS σε πραγματικές συνθήκες
+.
+Σύγκριση Εκπαιδεύσεων: Ένα ενιαίο παράθυρο σύγκρισης όλων των αποθηκευμένων runs με 18 στήλες δεδομένων, 7 διαδραστικά γραφήματα και αυτόματη σύσταση του "Καλύτερου Μοντέλου" βάσει 7 διαφορετικών κριτηρίων (mAP, F1-Score, Efficiency κ.ά.)
+.
+7. Σύστημα Αναφορών και Σταθερότητας
+PDF Reports: Αυτόματη παραγωγή επαγγελματικών αναφορών εκπαίδευσης και ανίχνευσης μέσω της βιβλιοθήκης ReportLab, που περιλαμβάνουν πίνακες μετρικών, καμπύλες loss/accuracy και πληροφορίες hardware
+.
+Διαχείριση Σφαλμάτων: Διαθέτει προηγμένο σύστημα καταγραφής Crash Logs με πλήρες traceback και thread dump, καθώς και διαγνωστικά εργαλεία για την κατάσταση της GPU και της VRAM
+.
+Ασφάλεια Υλικού (Hardware Guards): Ενσωματώνει μηχανισμούς κλειδώματος της κάμερας (camera lock) για την αποτροπή συγκρούσεων μεταξύ διαφορετικών tabs και έξυπνη εκκαθάριση μνήμης GPU/CPU
+.
+8. Σχεδιασμός και Εμπειρία Χρήστη (UI/UX)
+Η έκδοση 6.0 προσφέρει ένα πλήρως ανανεωμένο περιβάλλον με:
+Θέματα Dark & Light: Χρωματικές παλέτες εμπνευσμένες από το GitHub για υψηλή αναγνωσιμότητα
+.
+Splash Screen: Δυναμική οθόνη εκκίνησης με animations και gradients
+.
+Προσβασιμότητα: Εργαλεία ζουμ γραμματοσειράς, πλήρη υποστήριξη συντομεύσεων πληκτρολογίου και live dashboard παρακολούθησης πόρων συστήματος
+
 7. Λήψη πλήρους προγράμματος εγκατάστασης: https://drive.google.com/drive/folders/1gC3sIyvGoJoRG75GcNWAmV5UnfHskoXg?usp=drive_link
