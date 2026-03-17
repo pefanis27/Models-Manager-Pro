@@ -44,9 +44,9 @@ Resource Monitoring: Real-time tracking of CPU, RAM, and GPU usage
 Robust Logging: Features advanced error handling, crash logs with full thread dumps, and a Python faulthandler for capturing low-level system crashes
 .
 UI Features: Supports Light/Dark theme toggling and adaptive UI scaling for different screen resolutions.
-.
+
 7.  Download full Installer: https://drive.google.com/drive/folders/1gC3sIyvGoJoRG75GcNWAmV5UnfHskoXg?usp=drive_link
-.
+
 # Models-Manager-Pro v4.0 (Greek)
 ![Project_Manager_Pro_Ver_6_0](Project_Manager_Pro_Ver_6_0.png)
 Το Models Manager Pro v4.0 (A.I. Copilot Edition), δημιουργία του Πεφάνη Ευάγγελου, αποτελεί μια ολοκληρωμένη desktop εφαρμογή για την πλήρη διαχείριση του κύκλου ζωής μοντέλων YOLO (v5–v12) και CNN (torchvision)
