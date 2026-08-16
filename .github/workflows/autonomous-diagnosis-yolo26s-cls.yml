@@ -1,0 +1,41 @@
+name: Autonomous Diagnosis YOLO26s CLS Weight
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  fetch-weight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download official pretrained YOLO26s-cls
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install ultralytics==8.4.114
+          mkdir -p weight
+          python - <<'PY'
+          from ultralytics import YOLO
+          from pathlib import Path
+          import shutil
+          YOLO('yolo26s-cls.pt')
+          p=Path('yolo26s-cls.pt')
+          assert p.exists()
+          shutil.copy2(p,'weight/yolo26s-cls.pt')
+          print(p.stat().st_size)
+          PY
+          sha256sum weight/yolo26s-cls.pt > weight/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yolo26s-cls-pretrained-20260816
+          path: weight
+          if-no-files-found: error
+          retention-days: 1
