@@ -1,0 +1,28 @@
+name: Autonomous Diagnosis PNNX Tool
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  package-pnnx:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official pnnx Linux release
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p pnnx_bundle
+          curl -L --fail --retry 3 -o pnnx_bundle/pnnx-20260704-linux.zip https://github.com/pnnx/pnnx/releases/download/20260704/pnnx-20260704-linux.zip
+          echo '685ee1d718068809bdbbc7a9417fa4e2e98a9f2164e8ad9fad73f63377464066  pnnx_bundle/pnnx-20260704-linux.zip' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pnnx-20260704-linux-verified
+          path: pnnx_bundle
+          if-no-files-found: error
+          retention-days: 1
