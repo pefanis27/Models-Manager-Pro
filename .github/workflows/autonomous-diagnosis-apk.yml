@@ -26,7 +26,11 @@ jobs:
             autonomous_apk_build/chunks2/chunk_04 \
             autonomous_apk_build/chunks2/chunk_05_0 \
             autonomous_apk_build/chunks2/chunk_05_1_0 \
-            autonomous_apk_build/chunks2/chunk_05_1_1 \
+            autonomous_apk_build/chunks3/chunk_00 \
+            autonomous_apk_build/chunks3/chunk_01 \
+            autonomous_apk_build/chunks3/chunk_02 \
+            autonomous_apk_build/chunks3/chunk_03 \
+            autonomous_apk_build/chunks3/chunk_04 \
             autonomous_apk_build/chunks2/chunk_06 \
             autonomous_apk_build/chunks2/chunk_07 \
             autonomous_apk_build/chunks2/chunk_08 \
