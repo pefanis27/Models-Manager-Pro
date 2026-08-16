@@ -40,28 +40,45 @@ jobs:
           echo "9f50304869e70b373b689c05a79e700e592dab237da120425feeb5e6b2f42acf  autonomous_apk_build/project.tar.gz" | sha256sum -c -
           tar -xzf autonomous_apk_build/project.tar.gz -C autonomous_apk_build/project
 
-      - name: Apply camera UI and classifier fixes
+      - name: Apply v1.1 camera and classifier fixes
         shell: bash
         working-directory: autonomous_apk_build/project
         run: |
           patch -p1 --forward < ../hotfix_v111.patch
           patch -p1 --forward < ../hotfix_v112.patch
-          grep -q 'state->threads, false' app/src/main/cpp/ncnn_bridge.cpp
-          grep -q 'Classifier NCNN output mismatch: dims=' app/src/main/cpp/ncnn_bridge.cpp
-          grep -q 'CLS ${detection.domain}#${detection.trackId} ERROR' app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
 
-      - name: Configure final release variant
+      - name: Apply v1.3.0 field fixes
         shell: bash
         working-directory: autonomous_apk_build/project
         run: |
-          sed -i 's/versionCode = 4/versionCode = 100/' app/build.gradle.kts
-          sed -i 's/versionName = "1.1.2-ncnn-classifier-fix"/versionName = "1.2.0"/' app/build.gradle.kts
+          patch -p1 --forward < ../hotfix_v130.patch
+          grep -q 'logical_scalar_count' app/src/main/cpp/ncnn_bridge.cpp
+          grep -q 'target_aware_nms' app/src/main/cpp/ncnn_bridge.cpp
+          grep -q 'set_light_mode(true)' app/src/main/cpp/ncnn_bridge.cpp
+          grep -q '2200L' app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+          grep -q 'setSafeVerticalRegion' app/src/main/java/gr/uop/autonomousdiagnosis/ui/DiagnosisOverlayView.kt
+          grep -q 'maxTrackGapMs: Long = 6500L' app/src/main/java/gr/uop/autonomousdiagnosis/model/ModelManifest.kt
+
+      - name: Configure final v1.3.0 release variant
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          sed -i 's/versionCode = 4/versionCode = 130/' app/build.gradle.kts
+          sed -i 's/versionName = "1.1.2-ncnn-classifier-fix"/versionName = "1.3.0"/' app/build.gradle.kts
           sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/' app/build.gradle.kts
           sed -i 's/isShrinkResources = true/isShrinkResources = false/' app/build.gradle.kts
           sed -i '/release {/a\            isDebuggable = false' app/build.gradle.kts
-          grep -q 'versionCode = 100' app/build.gradle.kts
-          grep -q 'versionName = "1.2.0"' app/build.gradle.kts
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/assets/models/models_manifest.json')
+          s = p.read_text()
+          s = s.replace('"max_track_gap_ms": 2200', '"max_track_gap_ms": 6500')
+          p.write_text(s)
+          PY
+          grep -q 'versionCode = 130' app/build.gradle.kts
+          grep -q 'versionName = "1.3.0"' app/build.gradle.kts
           grep -q 'isDebuggable = false' app/build.gradle.kts
+          grep -q '"max_track_gap_ms": 6500' app/src/main/assets/models/models_manifest.json
 
       - uses: actions/setup-python@v5
         with:
@@ -88,7 +105,7 @@ jobs:
         working-directory: autonomous_apk_build/project
         run: python tools/fetch_ncnn_android_sdk.py
 
-      - name: Build final unsigned RELEASE APK with placeholder model binaries
+      - name: Build final unsigned v1.3.0 RELEASE APK with placeholder model binaries
         working-directory: autonomous_apk_build/project
         run: gradle --no-daemon --stacktrace :app:assembleRelease
 
@@ -100,8 +117,8 @@ jobs:
           test -f "$APK"
           sha256sum "$APK" | tee release-apk-placeholder.sha256
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" dump xmltree "$APK" --file AndroidManifest.xml > release-manifest.txt
-          grep -q 'versionCode.*100' release-manifest.txt
-          grep -q 'versionName.*1.2.0' release-manifest.txt
+          grep -q 'versionCode.*130' release-manifest.txt
+          grep -q 'versionName.*1.3.0' release-manifest.txt
           if grep -q 'debuggable.*true' release-manifest.txt; then
             echo 'ERROR: release APK is debuggable' >&2
             exit 1
@@ -109,7 +126,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AutonomousDiagnosis-v1.2.0-unsigned-release-placeholder
+          name: AutonomousDiagnosis-v1.3.0-unsigned-release-placeholder
           path: |
             autonomous_apk_build/project/app/build/outputs/apk/release/app-release-unsigned.apk
             autonomous_apk_build/project/release-manifest.txt
