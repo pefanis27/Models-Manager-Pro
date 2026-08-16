@@ -16,15 +16,20 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install Build Tools 36
         run: sdkmanager "build-tools;36.0.0"
-      - name: Package zipalign
+      - name: Package zipalign and runtime library
         shell: bash
         run: |
           mkdir -p zipalign-tool
-          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" zipalign-tool/
+          BT="$ANDROID_SDK_ROOT/build-tools/36.0.0"
+          cp "$BT/zipalign" zipalign-tool/
           chmod +x zipalign-tool/zipalign
+          LIBCPP="$(find "$BT" -type f -name 'libc++.so*' | head -n 1)"
+          test -n "$LIBCPP"
+          cp "$LIBCPP" zipalign-tool/libc++.so
+          ldd zipalign-tool/zipalign || true
       - uses: actions/upload-artifact@v4
         with:
-          name: android-build-tools-zipalign-36
-          path: zipalign-tool/zipalign
+          name: android-build-tools-zipalign-36-with-libcpp
+          path: zipalign-tool/
           if-no-files-found: error
           retention-days: 1
