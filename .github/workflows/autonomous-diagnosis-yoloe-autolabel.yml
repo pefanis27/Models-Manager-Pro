@@ -1,0 +1,47 @@
+name: Autonomous Diagnosis YOLOE AutoLabel Model
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  package-yoloe:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Ultralytics and CLIP support
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install ultralytics==8.4.114
+          python -m pip install 'git+https://github.com/ultralytics/CLIP.git'
+      - name: Configure YOLOE vineyard semantic prompts
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p yoloe_bundle
+          python - <<'PY'
+          from ultralytics import YOLOE
+          from pathlib import Path
+          model=YOLOE('yoloe-11s-seg.pt')
+          classes=['grape cluster','grape leaf']
+          model.set_classes(classes)
+          model.save('yoloe_bundle/vineyard_yoloe_11s_seg.pt')
+          p=Path('yoloe_bundle/vineyard_yoloe_11s_seg.pt')
+          print('saved',p,p.stat().st_size)
+          print('names',model.names)
+          PY
+          sha256sum yoloe_bundle/vineyard_yoloe_11s_seg.pt | tee yoloe_bundle/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-diagnosis-vineyard-yoloe-20260816
+          path: yoloe_bundle
+          if-no-files-found: error
+          retention-days: 1
