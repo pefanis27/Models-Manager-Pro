@@ -18,7 +18,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p autonomous_apk_build/project
+          cat autonomous_apk_build/chunks2/chunk_* > autonomous_apk_build/project.tar.gz.b64
+          test "$(wc -c < autonomous_apk_build/project.tar.gz.b64)" -eq 40756
           base64 -d autonomous_apk_build/project.tar.gz.b64 > autonomous_apk_build/project.tar.gz
+          echo "9f50304869e70b373b689c05a79e700e592dab237da120425feeb5e6b2f42acf  autonomous_apk_build/project.tar.gz" | sha256sum -c -
           tar -xzf autonomous_apk_build/project.tar.gz -C autonomous_apk_build/project
 
       - uses: actions/setup-python@v5
