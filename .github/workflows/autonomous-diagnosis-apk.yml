@@ -1,4 +1,4 @@
-name: Autonomous Diagnosis Android APK
+name: Autonomous Diagnosis Android RELEASE APK
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-apk:
+  build-release-apk:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,20 +40,28 @@ jobs:
           echo "9f50304869e70b373b689c05a79e700e592dab237da120425feeb5e6b2f42acf  autonomous_apk_build/project.tar.gz" | sha256sum -c -
           tar -xzf autonomous_apk_build/project.tar.gz -C autonomous_apk_build/project
 
-      - name: Apply v1.1.1 camera and UI hotfix
-        shell: bash
-        working-directory: autonomous_apk_build/project
-        run: patch -p1 --forward < ../hotfix_v111.patch
-
-      - name: Apply v1.1.2 NCNN classifier hotfix
+      - name: Apply camera UI and classifier fixes
         shell: bash
         working-directory: autonomous_apk_build/project
         run: |
+          patch -p1 --forward < ../hotfix_v111.patch
           patch -p1 --forward < ../hotfix_v112.patch
-          grep -q 'versionName = "1.1.2-ncnn-classifier-fix"' app/build.gradle.kts
           grep -q 'state->threads, false' app/src/main/cpp/ncnn_bridge.cpp
           grep -q 'Classifier NCNN output mismatch: dims=' app/src/main/cpp/ncnn_bridge.cpp
           grep -q 'CLS ${detection.domain}#${detection.trackId} ERROR' app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+
+      - name: Configure final release variant
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          sed -i 's/versionCode = 4/versionCode = 100/' app/build.gradle.kts
+          sed -i 's/versionName = "1.1.2-ncnn-classifier-fix"/versionName = "1.2.0"/' app/build.gradle.kts
+          sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/' app/build.gradle.kts
+          sed -i 's/isShrinkResources = true/isShrinkResources = false/' app/build.gradle.kts
+          sed -i '/release {/a\            isDebuggable = false' app/build.gradle.kts
+          grep -q 'versionCode = 100' app/build.gradle.kts
+          grep -q 'versionName = "1.2.0"' app/build.gradle.kts
+          grep -q 'isDebuggable = false' app/build.gradle.kts
 
       - uses: actions/setup-python@v5
         with:
@@ -66,7 +74,7 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK, NDK and CMake
+      - name: Install Android SDK NDK and CMake
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null || true
@@ -80,17 +88,31 @@ jobs:
         working-directory: autonomous_apk_build/project
         run: python tools/fetch_ncnn_android_sdk.py
 
-      - name: Build v1.1.2 debug APK with placeholder model binaries
+      - name: Build final unsigned RELEASE APK with placeholder model binaries
         working-directory: autonomous_apk_build/project
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
 
-      - name: Record APK checksum
+      - name: Verify release manifest and checksum
+        shell: bash
         working-directory: autonomous_apk_build/project
-        run: sha256sum app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$APK"
+          sha256sum "$APK" | tee release-apk-placeholder.sha256
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" dump xmltree "$APK" --file AndroidManifest.xml > release-manifest.txt
+          grep -q 'versionCode.*100' release-manifest.txt
+          grep -q 'versionName.*1.2.0' release-manifest.txt
+          if grep -q 'debuggable.*true' release-manifest.txt; then
+            echo 'ERROR: release APK is debuggable' >&2
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AutonomousDiagnosis-v1.1.2-placeholder-debug-apk
-          path: autonomous_apk_build/project/app/build/outputs/apk/debug/app-debug.apk
+          name: AutonomousDiagnosis-v1.2.0-unsigned-release-placeholder
+          path: |
+            autonomous_apk_build/project/app/build/outputs/apk/release/app-release-unsigned.apk
+            autonomous_apk_build/project/release-manifest.txt
+            autonomous_apk_build/project/release-apk-placeholder.sha256
           if-no-files-found: error
           retention-days: 1
