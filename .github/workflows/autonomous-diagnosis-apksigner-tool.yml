@@ -1,0 +1,33 @@
+name: Autonomous Diagnosis APK Signer Tool
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+    paths:
+      - '.github/workflows/autonomous-diagnosis-apksigner-tool.yml'
+  workflow_dispatch:
+
+jobs:
+  fetch-apksigner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install Build Tools 36
+        shell: bash
+        run: sdkmanager "build-tools;36.0.0"
+      - name: Package apksigner
+        shell: bash
+        run: |
+          mkdir -p apk-sign-tool
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" apk-sign-tool/
+          cp "$ANDROID_HOME/build-tools/36.0.0/apksigner" apk-sign-tool/
+          chmod +x apk-sign-tool/apksigner
+          sha256sum apk-sign-tool/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-build-tools-apksigner-36
+          path: apk-sign-tool/
+          if-no-files-found: error
+          retention-days: 1
