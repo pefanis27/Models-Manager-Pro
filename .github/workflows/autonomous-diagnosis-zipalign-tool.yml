@@ -1,0 +1,30 @@
+name: Autonomous Diagnosis ZIPALIGN Tool
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  fetch-zipalign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+      - name: Install Build Tools 36
+        run: sdkmanager "build-tools;36.0.0"
+      - name: Package zipalign
+        shell: bash
+        run: |
+          mkdir -p zipalign-tool
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" zipalign-tool/
+          chmod +x zipalign-tool/zipalign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-build-tools-zipalign-36
+          path: zipalign-tool/zipalign
+          if-no-files-found: error
+          retention-days: 1
