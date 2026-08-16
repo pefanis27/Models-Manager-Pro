@@ -1,0 +1,55 @@
+name: Autonomous Diagnosis ML Tools
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  package-ml-tools:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build local wheelhouse
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p ml_bundle/wheels ml_bundle/weights ml_bundle/ncnn
+          python -m pip download --no-deps ultralytics==8.4.114 -d ml_bundle/wheels
+          python -m pip download --no-deps ultralytics-thop -d ml_bundle/wheels
+          python -m pip download polars -d ml_bundle/wheels
+          python -m pip install ultralytics==8.4.114
+          python - <<'PY'
+          from ultralytics import YOLO
+          import shutil, pathlib
+          out=pathlib.Path('ml_bundle/weights')
+          for name in ('yolo26n.pt','yolo26n-cls.pt'):
+              m=YOLO(name)
+              src=pathlib.Path(name)
+              if not src.exists():
+                  raise SystemExit(f'missing downloaded weight {name}')
+              shutil.copy2(src,out/name)
+              print(name,src.stat().st_size)
+          PY
+      - name: Download verified NCNN Ubuntu toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 -o ml_bundle/ncnn/ncnn-20260526-ubuntu-2404.zip https://github.com/Tencent/ncnn/releases/download/20260526/ncnn-20260526-ubuntu-2404.zip
+          echo 'c6daf0c8fb2546de420c7b320e2ce62ba764163ace0ba63a2ea0cdfca70d684d  ml_bundle/ncnn/ncnn-20260526-ubuntu-2404.zip' | sha256sum -c -
+      - name: Inventory
+        shell: bash
+        run: |
+          find ml_bundle -maxdepth 3 -type f -printf '%P %s bytes\n' | sort | tee ml_bundle/INVENTORY.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-diagnosis-ml-tools-20260816
+          path: ml_bundle
+          if-no-files-found: error
+          retention-days: 1
