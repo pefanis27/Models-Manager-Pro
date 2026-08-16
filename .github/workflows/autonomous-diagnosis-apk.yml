@@ -40,6 +40,16 @@ jobs:
           echo "9f50304869e70b373b689c05a79e700e592dab237da120425feeb5e6b2f42acf  autonomous_apk_build/project.tar.gz" | sha256sum -c -
           tar -xzf autonomous_apk_build/project.tar.gz -C autonomous_apk_build/project
 
+      - name: Apply v1.1.1 camera, UI and classifier diagnostics hotfix
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          patch -p1 --forward < ../hotfix_v111.patch
+          grep -q 'versionName = "1.1.1-ncnn-hotfix"' app/build.gradle.kts
+          grep -q 'detector_confidence": 0.25' app/src/main/assets/models/models_manifest.json
+          grep -q 'diagnosticsText' app/src/main/res/layout/activity_main.xml
+          grep -q 'val r = buffer.get(offset)' app/src/main/java/gr/uop/autonomousdiagnosis/camera/ImageProxyConverter.kt
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -65,7 +75,7 @@ jobs:
         working-directory: autonomous_apk_build/project
         run: python tools/fetch_ncnn_android_sdk.py
 
-      - name: Build debug APK with placeholder model binaries
+      - name: Build v1.1.1 debug APK with placeholder model binaries
         working-directory: autonomous_apk_build/project
         run: gradle --no-daemon --stacktrace :app:assembleDebug
 
@@ -75,7 +85,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AutonomousDiagnosis-placeholder-debug-apk
+          name: AutonomousDiagnosis-v1.1.1-placeholder-debug-apk
           path: autonomous_apk_build/project/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
