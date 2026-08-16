@@ -1,0 +1,217 @@
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -11,8 +11,8 @@
+         applicationId = "gr.uop.autonomousdiagnosis"
+         minSdk = 26
+         targetSdk = 36
+-        versionCode = 130
+-        versionName = "1.3.0"
++        versionCode = 140
++        versionName = "1.4.0"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables.useSupportLibrary = true
+ 
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/model/ModelManifest.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/model/ModelManifest.kt
+@@ -33,7 +33,8 @@
+     val domainByClass: Map<String, String> = emptyMap(),
+     val healthyClasses: Set<String> = emptySet(),
+     val resizeMode: String = "letterbox",
+-    val inputScale: Float = 1f / 255f
++    val inputScale: Float = 1f / 255f,
++    val acceptanceConfidence: Float = 0.65f
+ )
+ 
+ data class ModelsManifest(
+@@ -96,7 +97,8 @@
+                 domainByClass = domains,
+                 healthyClasses = healthy,
+                 resizeMode = obj.optString("resize_mode", if (id == "detector") "letterbox" else "resize_short_center_crop"),
+-                inputScale = obj.optDouble("input_scale", 1.0 / 255.0).toFloat()
++                inputScale = obj.optDouble("input_scale", 1.0 / 255.0).toFloat(),
++                acceptanceConfidence = obj.optDouble("acceptance_confidence", 0.65).toFloat()
+             )
+         }
+ 
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+@@ -85,7 +85,7 @@
+         for (detection in prioritized) {
+             processedIds += detection.trackId
+             val cache = predictionCache[detection.trackId]
+-            val due = cache == null || timestampMs - cache.timestampMs >= 2200L
++            val due = cache == null || timestampMs - cache.timestampMs >= 1200L
+             var currentPrediction = cache?.prediction
+             var currentDecision = consensus.snapshot(detection.trackId)
+             var crop: Bitmap? = null
+@@ -104,21 +104,26 @@
+                             classifierRuns++
+                             currentPrediction = prediction
+                             predictionCache[detection.trackId] = PredictionCache(prediction, timestampMs, cropQuality.score)
+-                            currentDecision = consensus.observe(
+-                                detection.trackId,
+-                                detection.label,
+-                                detection.domain,
+-                                detection.box,
+-                                prediction,
+-                                frameQuality.score,
+-                                cropQuality.score,
+-                                detection.confidence,
+-                                timestampMs
+-                            )
++                            val classifierSpec = if (detection.domain == "leaf") manifest.leafClassifier else manifest.grapeClassifier
++                            if (prediction.confidence >= classifierSpec.acceptanceConfidence) {
++                                currentDecision = consensus.observe(
++                                    detection.trackId,
++                                    detection.label,
++                                    detection.domain,
++                                    detection.box,
++                                    prediction,
++                                    frameQuality.score,
++                                    cropQuality.score,
++                                    detection.confidence,
++                                    timestampMs
++                                )
++                            }
+                             val ranked = prediction.probabilities.entries.sortedByDescending { it.value }
+                             val second = ranked.getOrNull(1)?.value ?: 0f
+                             val entropy = normalizedEntropy(prediction.probabilities)
+-                            diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ${prediction.label} ${(prediction.confidence * 100).toInt()}% ${classifierMs}ms H=${"%.2f".format(entropy)} M=${"%.2f".format((prediction.confidence - second).coerceAtLeast(0f))} Q=${cropQuality.score.toInt()}"
++                            val gate = classifierSpec.acceptanceConfidence
++                            val gateMark = if (prediction.confidence >= gate) "OK" else "LOW<${(gate * 100).toInt()}%"
++                            diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ${prediction.label} ${(prediction.confidence * 100).toInt()}% $gateMark ${classifierMs}ms H=${"%.2f".format(entropy)} M=${"%.2f".format((prediction.confidence - second).coerceAtLeast(0f))} Q=${cropQuality.score.toInt()}"
+                         } catch (t: Throwable) {
+                             // A classifier failure must never hide a valid detector box.
+                             // Keep returning the frame overlays and expose the exact reason
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/ai/ImagePreprocessor.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/ai/ImagePreprocessor.kt
+@@ -32,7 +32,7 @@
+ object ImagePreprocessor {
+     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+ 
+-    /** Ultralytics detection inference: aspect-ratio resize + 114 letterbox to fixed 640x640. */
++    /** Ultralytics detection inference: aspect-ratio resize + 114 letterbox to manifest-defined square input. */
+     fun detector(bitmap: Bitmap, spec: ModelSpec): PreparedBitmap {
+         val targetW = spec.inputWidth
+         val targetH = spec.inputHeight
+@@ -50,7 +50,7 @@
+     }
+ 
+     /**
+-     * Ultralytics v8.4.120 classification inference for square size=640:
++     * Ultralytics classification inference for manifest-defined square size:
+      * Resize(shorter edge -> 640), CenterCrop(640), ToTensor(); mean=(0,0,0), std=(1,1,1).
+      * Native NCNN performs RGB conversion and /255 after this bitmap geometry step.
+      */
+--- a/app/src/main/assets/models/models_manifest.json
++++ b/app/src/main/assets/models/models_manifest.json
+@@ -1,24 +1,28 @@
+ {
+-  "schema_version": 2,
++  "schema_version": 3,
+   "runtime": "ncnn",
+   "export_environment": {
+-    "ultralytics": "8.4.120",
+-    "input_precision": "FP32",
+-    "input_size": 640
++    "ultralytics": "8.4.114",
++    "ncnn": "20260526",
++    "pnnx": "20260526",
++    "weight_precision": "FP16"
+   },
+   "models": {
+     "detector": {
+       "role": "detector",
+       "param_file": "detector/model.ncnn.param",
+       "bin_file": "detector/model.ncnn.bin",
+-      "input_width": 640,
+-      "input_height": 640,
++      "input_width": 320,
++      "input_height": 320,
+       "input_name": "in0",
+       "output_name": "out0",
+       "resize_mode": "letterbox_114",
+       "output_format": "ultralytics_decoded_xywh",
+       "input_scale": 0.00392156862745098,
+-      "class_names": ["Grape_Cluster", "Leaf"],
++      "class_names": [
++        "Grape_Cluster",
++        "Leaf"
++      ],
+       "domain_by_class": {
+         "Grape_Cluster": "grape",
+         "Leaf": "leaf"
+@@ -28,13 +32,14 @@
+       "role": "leaf_classifier",
+       "param_file": "leaf_classifier/model.ncnn.param",
+       "bin_file": "leaf_classifier/model.ncnn.bin",
+-      "input_width": 640,
+-      "input_height": 640,
++      "input_width": 256,
++      "input_height": 256,
+       "input_name": "in0",
+       "output_name": "out0",
+       "resize_mode": "resize_short_center_crop",
+       "output_format": "probabilities",
+       "input_scale": 0.00392156862745098,
++      "acceptance_confidence": 0.75,
+       "class_names": [
+         "Leaf_Black_Rot",
+         "Leaf_Blight",
+@@ -43,19 +48,22 @@
+         "Leaf_Healthy",
+         "Leaf_Powdery_Mildew"
+       ],
+-      "healthy_classes": ["Leaf_Healthy"]
++      "healthy_classes": [
++        "Leaf_Healthy"
++      ]
+     },
+     "grape_classifier": {
+       "role": "grape_classifier",
+       "param_file": "grape_classifier/model.ncnn.param",
+       "bin_file": "grape_classifier/model.ncnn.bin",
+-      "input_width": 640,
+-      "input_height": 640,
++      "input_width": 256,
++      "input_height": 256,
+       "input_name": "in0",
+       "output_name": "out0",
+       "resize_mode": "resize_short_center_crop",
+       "output_format": "probabilities",
+       "input_scale": 0.00392156862745098,
++      "acceptance_confidence": 0.8,
+       "class_names": [
+         "Grape_Black_Rot",
+         "Grape_Downy_Mildew",
+@@ -63,21 +71,23 @@
+         "Grape_Healthy",
+         "Grape_Powdery_Mildew"
+       ],
+-      "healthy_classes": ["Grape_Healthy"]
++      "healthy_classes": [
++        "Grape_Healthy"
++      ]
+     }
+   },
+   "diagnosis": {
+-    "analysis_fps": 6.0,
+-    "detector_confidence": 0.25,
+-    "detector_iou": 0.50,
++    "analysis_fps": 8.0,
++    "detector_confidence": 0.1,
++    "detector_iou": 0.5,
+     "classification_confidence": 0.65,
+     "min_quality": 35.0,
+     "min_sharpness": 30.0,
+     "min_observations": 3,
+-    "agreement": 0.70,
++    "agreement": 0.7,
+     "temporal_confidence": 0.65,
+     "max_track_gap_ms": 6500,
+     "max_normalized_entropy": 1.0,
+-    "candidate_coverage": 0.90
++    "candidate_coverage": 0.9
+   }
+-}
++}
