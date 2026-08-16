@@ -1,0 +1,62 @@
+name: Autonomous Diagnosis Android APK
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Android project payload
+        shell: bash
+        run: |
+          mkdir -p autonomous_apk_build/project
+          base64 -d autonomous_apk_build/project.tar.gz.b64 > autonomous_apk_build/project.tar.gz
+          tar -xzf autonomous_apk_build/project.tar.gz -C autonomous_apk_build/project
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK, NDK and CMake
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Download verified NCNN Android SDK
+        working-directory: autonomous_apk_build/project
+        run: python tools/fetch_ncnn_android_sdk.py
+
+      - name: Build debug APK with placeholder model binaries
+        working-directory: autonomous_apk_build/project
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Record APK checksum
+        working-directory: autonomous_apk_build/project
+        run: sha256sum app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-placeholder-debug-apk
+          path: autonomous_apk_build/project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 1
