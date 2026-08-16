@@ -1,0 +1,138 @@
+diff -ruN AutonomousDiagnosisAndroid_NCNN_v1_1_1_hotfix_source/app/build.gradle.kts AutonomousDiagnosisAndroid_NCNN_v1_1_2_classifier_fix_source/app/build.gradle.kts
+--- AutonomousDiagnosisAndroid_NCNN_v1_1_1_hotfix_source/app/build.gradle.kts	2026-08-16 17:09:58.537366126 +0000
++++ AutonomousDiagnosisAndroid_NCNN_v1_1_2_classifier_fix_source/app/build.gradle.kts	2026-08-16 17:34:26.757562608 +0000
+@@ -11,8 +11,8 @@
+         applicationId = "gr.uop.autonomousdiagnosis"
+         minSdk = 26
+         targetSdk = 36
+-        versionCode = 3
+-        versionName = "1.1.1-ncnn-hotfix"
++        versionCode = 4
++        versionName = "1.1.2-ncnn-classifier-fix"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables.useSupportLibrary = true
+ 
+ diff -ruN AutonomousDiagnosisAndroid_NCNN_v1_1_1_hotfix_source/app/src/main/cpp/ncnn_bridge.cpp AutonomousDiagnosisAndroid_NCNN_v1_1_2_classifier_fix_source/app/src/main/cpp/ncnn_bridge.cpp
+--- AutonomousDiagnosisAndroid_NCNN_v1_1_1_hotfix_source/app/src/main/cpp/ncnn_bridge.cpp	2026-08-16 16:17:44.000000000 +0000
++++ AutonomousDiagnosisAndroid_NCNN_v1_1_2_classifier_fix_source/app/src/main/cpp/ncnn_bridge.cpp	2026-08-16 17:34:26.757710268 +0000
+@@ -8,6 +8,7 @@
+ #include <memory>
+ #include <cstring>
+ #include <string>
++#include <sstream>
+ #include <vector>
+ 
+ namespace {
+@@ -104,11 +105,11 @@
+     return kept;
+ }
+ 
+-int load_net(ncnn::Net& net, AAssetManager* mgr, const char* param, const char* bin, int threads) {
++int load_net(ncnn::Net& net, AAssetManager* mgr, const char* param, const char* bin, int threads, bool packing_layout) {
+     net.clear();
+     net.opt = ncnn::Option();
+     net.opt.num_threads = std::max(1, threads);
+-    net.opt.use_packing_layout = true;
++    net.opt.use_packing_layout = packing_layout;
+     net.opt.use_vulkan_compute = false; // broadest deterministic Android compatibility for v1.1
+     const int p = net.load_param(mgr, param);
+     if (p != 0) return p;
+@@ -137,9 +138,12 @@
+     auto state = std::make_unique<RuntimeState>();
+     state->threads = std::max(1, static_cast<int>(threads));
+     UtfChars dp(env, detector_param), db(env, detector_bin), lp(env, leaf_param), lb(env, leaf_bin), gp(env, grape_param), gb(env, grape_bin);
+-    if (load_net(state->detector, mgr, dp.c_str(), db.c_str(), state->threads) != 0 ||
+-        load_net(state->leaf, mgr, lp.c_str(), lb.c_str(), state->threads) != 0 ||
+-        load_net(state->grape, mgr, gp.c_str(), gb.c_str(), state->threads) != 0) {
++    if (load_net(state->detector, mgr, dp.c_str(), db.c_str(), state->threads, true) != 0 ||
++        // Classifier heads are tiny (5/6 classes). Disable packing so out0 is a
++        // scalar class vector on every ARM device instead of a packed Mat whose
++        // logical element count differs from Mat::total().
++        load_net(state->leaf, mgr, lp.c_str(), lb.c_str(), state->threads, false) != 0 ||
++        load_net(state->grape, mgr, gp.c_str(), gb.c_str(), state->threads, false) != 0) {
+         throw_runtime(env, "Failed to load one or more embedded NCNN model artifacts");
+         return 0;
+     }
+@@ -251,14 +255,19 @@
+         throw_runtime(env, "Classifier NCNN output blob could not be extracted");
+         return nullptr;
+     }
+-    ncnn::Mat flat = out.reshape(static_cast<int>(out.total()));
+-    if (flat.empty() || flat.w != class_count) {
+-        throw_runtime(env, "Classifier NCNN output size does not match embedded class order");
++    const size_t scalar_count = out.total() * static_cast<size_t>(std::max(1, out.elempack));
++    if (out.elempack != 1 || scalar_count != static_cast<size_t>(class_count)) {
++        std::ostringstream oss;
++        oss << "Classifier NCNN output mismatch: dims=" << out.dims
++            << " w=" << out.w << " h=" << out.h << " d=" << out.d << " c=" << out.c
++            << " elempack=" << out.elempack << " scalar_count=" << scalar_count
++            << " expected=" << class_count;
++        throw_runtime(env, oss.str());
+         return nullptr;
+     }
+     jfloatArray result = env->NewFloatArray(class_count);
+     if (!result) return nullptr;
+-    env->SetFloatArrayRegion(result, 0, class_count, static_cast<const float*>(flat.data));
++    env->SetFloatArrayRegion(result, 0, class_count, static_cast<const float*>(out.data));
+     return result;
+ }
+ 
+ diff -ruN AutonomousDiagnosisAndroid_NCNN_v1_1_1_hotfix_source/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt AutonomousDiagnosisAndroid_NCNN_v1_1_2_classifier_fix_source/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+--- AutonomousDiagnosisAndroid_NCNN_v1_1_1_hotfix_source/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt	2026-08-16 17:12:05.529497790 +0000
++++ AutonomousDiagnosisAndroid_NCNN_v1_1_2_classifier_fix_source/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt	2026-08-16 17:34:26.757892638 +0000
+@@ -95,26 +95,35 @@
+                     val cropThreshold = max(35f, config.minQuality * 0.70f)
+                     if (cropQuality.score >= cropThreshold) {
+                         val classifier = if (detection.domain == "leaf") models.leafClassifier else models.grapeClassifier
+-                        val prediction = classifier.classify(crop)
+-                        classifierRuns++
+-                        currentPrediction = prediction
+-                        predictionCache[detection.trackId] = PredictionCache(prediction, timestampMs, cropQuality.score)
+-                        currentDecision = consensus.observe(
+-                            detection.trackId,
+-                            detection.label,
+-                            detection.domain,
+-                            detection.box,
+-                            prediction,
+-                            frameQuality.score,
+-                            cropQuality.score,
+-                            detection.confidence,
+-                            timestampMs
+-                        )
+-                        val ranked = prediction.probabilities.entries.sortedByDescending { it.value }
+-                        val second = ranked.getOrNull(1)?.value ?: 0f
+-                        val entropy = normalizedEntropy(prediction.probabilities)
+-                        diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ${prediction.label} ${(prediction.confidence * 100).toInt()}% H=${"%.2f".format(entropy)} M=${"%.2f".format((prediction.confidence - second).coerceAtLeast(0f))} Q=${cropQuality.score.toInt()}"
+-                        classificationBudget--
++                        try {
++                            val prediction = classifier.classify(crop)
++                            classifierRuns++
++                            currentPrediction = prediction
++                            predictionCache[detection.trackId] = PredictionCache(prediction, timestampMs, cropQuality.score)
++                            currentDecision = consensus.observe(
++                                detection.trackId,
++                                detection.label,
++                                detection.domain,
++                                detection.box,
++                                prediction,
++                                frameQuality.score,
++                                cropQuality.score,
++                                detection.confidence,
++                                timestampMs
++                            )
++                            val ranked = prediction.probabilities.entries.sortedByDescending { it.value }
++                            val second = ranked.getOrNull(1)?.value ?: 0f
++                            val entropy = normalizedEntropy(prediction.probabilities)
++                            diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ${prediction.label} ${(prediction.confidence * 100).toInt()}% H=${"%.2f".format(entropy)} M=${"%.2f".format((prediction.confidence - second).coerceAtLeast(0f))} Q=${cropQuality.score.toInt()}"
++                        } catch (t: Throwable) {
++                            // A classifier failure must never hide a valid detector box.
++                            // Keep returning the frame overlays and expose the exact reason
++                            // in the live diagnostics line for field debugging.
++                            val reason = (t.message ?: t::class.java.simpleName).replace('\n', ' ').take(120)
++                            diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ERROR $reason"
++                        } finally {
++                            classificationBudget--
++                        }
+                     } else {
+                         diagnosticParts += "CLS ${detection.domain}#${detection.trackId} SKIP cropQ=${cropQuality.score.toInt()}<${cropThreshold.toInt()}"
+                     }
