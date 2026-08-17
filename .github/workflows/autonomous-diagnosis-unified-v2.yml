@@ -60,7 +60,7 @@ jobs:
         working-directory: autonomous_apk_build/project
         run: |
           base64 -d ../unified_v200_overlay.tar.gz.b64 > /tmp/unified_v200_overlay.tar.gz
-          echo "1748a98de5713fa9a38d421081bf3bd5da52857ce055951588464768d9b280d8  /tmp/unified_v200_overlay.tar.gz" | sha256sum -c -
+          echo "3610392789df793bd9a53c15dd730447900d13a81edb9e67adff99e83c3b5536  /tmp/unified_v200_overlay.tar.gz" | sha256sum -c -
           tar -xzf /tmp/unified_v200_overlay.tar.gz
           rm -f app/src/main/java/gr/uop/autonomousdiagnosis/ai/NcnnClassifier.kt
           rm -rf app/src/main/assets/models/leaf_classifier app/src/main/assets/models/grape_classifier
@@ -70,6 +70,7 @@ jobs:
           grep -q 'versionCode = 200' app/build.gradle.kts
           grep -q 'versionName = "2.0.0"' app/build.gradle.kts
           grep -q 'unified_disease_detector' app/src/main/assets/models/models_manifest.json
+          grep -q '"detector_confidence": 0.05' app/src/main/assets/models/models_manifest.json
           grep -q 'Leaf_Black_Rot' app/src/main/assets/models/models_manifest.json
           grep -q 'Grape_Powdery_Mildew' app/src/main/assets/models/models_manifest.json
           ! grep -R 'leafClassifier\|grapeClassifier\|target_aware_nms' app/src/main/java app/src/main/cpp
