@@ -52,6 +52,13 @@ jobs:
           sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/' app/build.gradle.kts
           sed -i 's/isShrinkResources = true/isShrinkResources = false/' app/build.gradle.kts
           sed -i '/release {/a\            isDebuggable = false' app/build.gradle.kts
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/assets/models/models_manifest.json')
+          s = p.read_text().replace('"max_track_gap_ms": 2200', '"max_track_gap_ms": 6500')
+          p.write_text(s)
+          PY
+          grep -q '"max_track_gap_ms": 6500' app/src/main/assets/models/models_manifest.json
           patch -p1 --forward < ../hotfix_v140.patch
           grep -q 'versionCode = 140' app/build.gradle.kts
 
