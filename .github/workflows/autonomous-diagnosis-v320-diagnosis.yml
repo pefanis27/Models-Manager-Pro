@@ -1,0 +1,198 @@
+name: Autonomous Diagnosis v3.2.0 Diagnosis-Only APK
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-final-apk-20260818
+    paths:
+      - 'V320_BUILD_TRIGGER.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autonomous-diagnosis-v320-diagnosis
+  cancel-in-progress: true
+
+jobs:
+  build-v320-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout final build branch
+        uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-final-apk-20260818
+
+      - name: Publish workflow run id immediately
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p tool_payload
+          echo "$GITHUB_RUN_ID" > tool_payload/final_v320_RUN_ID.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/final_v320_RUN_ID.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "[skip ci] publish v3.2.0 APK run id $GITHUB_RUN_ID"
+            git push origin HEAD:autonomous-diagnosis-final-apk-20260818
+          fi
+
+      - name: Reconstruct verified Android base
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v310_clean_payload/part_00 v310_clean_payload/part_01 v310_clean_payload/part_02 > /tmp/v310_source.tar.gz.b64
+          echo 'c275802a960e933dc555e994c90d9035f2835cad9a2e995c89a607629206d9bc  /tmp/v310_source.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/v310_source.tar.gz.b64 > /tmp/v310_source.tar.gz
+          echo '6efaf644f5a141c01e8257dfb749da8534d82dc2eb6bba648d13a70f9b38ee0f  /tmp/v310_source.tar.gz' | sha256sum -c -
+          rm -rf v320_android_project
+          mkdir -p v320_android_project
+          tar -xzf /tmp/v310_source.tar.gz -C v320_android_project
+          APP=v320_android_project/app
+          cp autonomous_apk_build/v311_hotfix/MainActivity.kt "$APP/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt"
+          cp autonomous_apk_build/v311_hotfix/native_detector.cpp "$APP/src/main/cpp/native_detector.cpp"
+          cp autonomous_apk_build/v311_hotfix/VideoDetectionTracker.kt "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          cp autonomous_apk_build/v312_hotfix/native_detector.cpp "$APP/src/main/cpp/native_detector.cpp"
+          cp autonomous_apk_build/v312_hotfix/VideoDetectionTracker.kt "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          cp autonomous_apk_build/v312_hotfix/DetectionOverlayView.kt "$APP/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt"
+
+      - name: Reconstruct and verify v3.2.0 diagnosis patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v320_patch/part_00 v320_patch/part_01 v320_patch/part_02 v320_patch/part_03_0 v320_patch/part_03_1 v320_patch/part_04 > /tmp/v320_patch.tar.gz.b64
+          echo 'a14483df6749487aafb423a1cf3e8e22562b367834c11427bb5d8588ff4a36e8  /tmp/v320_patch.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/v320_patch.tar.gz.b64 > /tmp/v320_patch.tar.gz
+          echo '775700743c479fea91c760a387c4d7bde3d758b6309e32c13ca9db24872a9d3f  /tmp/v320_patch.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v320_patch.tar.gz -C v320_android_project
+
+      - name: Verify v3.2.0 diagnosis contract
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=v320_android_project/app
+          CPP="$APP/src/main/cpp/native_detector.cpp"
+          MAIN="$APP/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt"
+          TRACK="$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          OVER="$APP/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt"
+          QUALITY="$APP/src/main/java/com/autonomousdiagnosis/app/FrameQualityEstimator.kt"
+          grep -F 'versionCode = 320' "$APP/build.gradle.kts"
+          grep -F 'versionName = "3.2.0"' "$APP/build.gradle.kts"
+          grep -F 'constexpr int kTargetSize = 640;' "$CPP"
+          grep -F 'constexpr int kAnchors = 8400;' "$CPP"
+          grep -F 'const float cx=value(0,a), cy=value(1,a), bw=value(2,a), bh=value(3,a);' "$CPP"
+          grep -F 'const float raw_x1=cx-bw*0.5f, raw_y1=cy-bh*0.5f;' "$CPP"
+          grep -F 'containment(candidate,accepted)>=0.82f' "$CPP"
+          grep -F 'net->opt.use_vulkan_compute=use_vulkan && ncnn::get_gpu_count()>0;' "$CPP"
+          grep -F 'private const val DETECTION_CONFIDENCE = 0.25f' "$MAIN"
+          grep -F 'private const val IOU_THRESHOLD = 0.50f' "$MAIN"
+          grep -F 'private const val ANALYSIS_INTERVAL_MS = 125L' "$MAIN"
+          grep -F 'text = "Vulkan GPU"; setTextColor(Color.WHITE); isChecked = true' "$MAIN"
+          grep -F 'private val minAgreement: Float = 0.70f' "$TRACK"
+          grep -F 'private val decisionConfidence: Float = 0.65f' "$TRACK"
+          grep -F 'private val dropoutGraceMs: Long = 260L' "$TRACK"
+          grep -F 'if (elapsed >= 600L) return true' "$TRACK"
+          grep -F 'return viewChanged && elapsed >= 330L' "$TRACK"
+          test -s "$QUALITY"
+          test "$(grep -c 'canvas.drawRoundRect' "$OVER")" -eq 1
+          test "$(grep -c 'canvas.drawRect' "$OVER" || true)" -eq 0
+          ! grep -q 'panelPaint\|outlinePaint' "$OVER"
+          grep -F 'android:icon="@mipmap/ic_launcher"' "$APP/src/main/AndroidManifest.xml"
+          ! grep -R -nE 'autonomous_diagnosis\.ncnn|unified_grapevine_yolo26s_640\.ncnn|5376|kTargetSize[[:space:]]*=[[:space:]]*512' "$APP/src/main"
+          grep -R -F 'diagnosis_yolo26s_640.ncnn.param' "$APP/src/main"
+          grep -R -F 'diagnosis_yolo26s_640.ncnn.bin' "$APP/src/main"
+
+      - name: Install build-only model placeholders
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ASSETS=v320_android_project/app/src/main/assets
+          rm -f "$ASSETS"/*.ncnn.param "$ASSETS"/*.ncnn.bin
+          printf 'PLACEHOLDER' > "$ASSETS/diagnosis_yolo26s_640.ncnn.param"
+          printf 'PLACEHOLDER' > "$ASSETS/diagnosis_yolo26s_640.ncnn.bin"
+          test "$(stat -c%s "$ASSETS/diagnosis_yolo26s_640.ncnn.param")" -eq 11
+          test "$(stat -c%s "$ASSETS/diagnosis_yolo26s_640.ncnn.bin")" -eq 11
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Download and verify ncnn 20260526 Android Vulkan
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/ncnn-sdk/unpacked
+          curl -L --fail --retry 3 -o /tmp/ncnn-sdk/ncnn.zip https://github.com/Tencent/ncnn/releases/download/20260526/ncnn-20260526-android-vulkan.zip
+          echo '26909c92eed35afed4a966b5e9e503fcb0a529691ea3f910ec2c94a4fff52804  /tmp/ncnn-sdk/ncnn.zip' | sha256sum -c -
+          unzip -q /tmp/ncnn-sdk/ncnn.zip -d /tmp/ncnn-sdk/unpacked
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          base=Path('/tmp/ncnn-sdk/unpacked')
+          cands=list(base.rglob('arm64-v8a/lib/cmake/ncnn/ncnnConfig.cmake'))
+          if len(cands)!=1: raise SystemExit(f'Expected one ncnnConfig.cmake, got {len(cands)}')
+          root=cands[0].parents[4]
+          dest=Path('v320_android_project/app/src/main/cpp/ncnn')
+          if dest.exists(): shutil.rmtree(dest)
+          shutil.copytree(root,dest)
+          PY
+
+      - name: Build unsigned v3.2.0 release APK
+        shell: bash
+        working-directory: v320_android_project
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Collect v3.2.0 substrate and signing tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="$(find v320_android_project/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)"
+          test -f "$APK"
+          BT="$ANDROID_SDK_ROOT/build-tools/36.0.0"
+          mkdir -p v320_build_artifact/tools/lib v320_build_artifact/tools/runtime-libs
+          cp "$APK" v320_build_artifact/AutonomousDiagnosis-v3.2.0-placeholder-unsigned.apk
+          cp "$BT/zipalign" "$BT/apksigner" "$BT/aapt2" v320_build_artifact/tools/
+          cp "$BT/lib/apksigner.jar" v320_build_artifact/tools/lib/
+          ldd "$BT/zipalign" | awk '/=> \/.*\(/ {print $3}' | while read -r lib; do cp -L "$lib" v320_build_artifact/tools/runtime-libs/ || true; done
+          chmod +x v320_build_artifact/tools/zipalign v320_build_artifact/tools/apksigner v320_build_artifact/tools/aapt2
+          cat > v320_build_artifact/BUILD_INFO.txt <<EOF
+          Autonomous Diagnosis Android v3.2.0
+          versionCode=320
+          versionName=3.2.0
+          applicationId=com.autonomousdiagnosis.app
+          model=USER-SUPPLIED official YOLO26s NCNN 640x640 / 11 classes / FP32
+          output=CX,CY,W,H + 11 sigmoid class probabilities / 8400 anchors
+          heldout_test=764 corrected test images, confidence 0.25, IoU 0.50
+          diagnosis=motion+IoU tracking + independent temporal evidence + quality gate
+          overlay=one rectangle per target, no black panels
+          vulkan=default ON when available + CPU fallback
+          MODEL=PLACEHOLDER ONLY; real user-supplied NCNN injected after build
+          github_run_id=$GITHUB_RUN_ID
+          EOF
+
+      - name: Upload v3.2.0 build substrate
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-v3.2.0-diagnosis-only-substrate
+          path: v320_build_artifact/
+          if-no-files-found: error
+          retention-days: 1
