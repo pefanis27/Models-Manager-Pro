@@ -1,2 +1,2 @@
 Autonomous Diagnosis v3.1.2 final dataset-tested build
-2026-08-18
+retry-safe-base-2026-08-18
