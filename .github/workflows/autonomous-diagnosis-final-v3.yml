@@ -97,17 +97,22 @@ jobs:
           test -f final_android_project/app/src/main/cpp/native_detector.cpp
           test -f final_android_project/app/src/main/AndroidManifest.xml
 
-      - name: Pin release version 3.0.0
+      - name: Pin release configuration
         shell: bash
         run: |
           set -euxo pipefail
-          sed -i 's/versionCode = 1/versionCode = 300/' final_android_project/app/build.gradle.kts
-          sed -i 's/versionName = "1.0.0"/versionName = "3.0.0"/' final_android_project/app/build.gradle.kts
-          grep -F 'versionCode = 300' final_android_project/app/build.gradle.kts
-          grep -F 'versionName = "3.0.0"' final_android_project/app/build.gradle.kts
+          BUILD_FILE=final_android_project/app/build.gradle.kts
+          sed -i 's/versionCode = 1/versionCode = 300/' "$BUILD_FILE"
+          sed -i 's/versionName = "1.0.0"/versionName = "3.0.0"/' "$BUILD_FILE"
+          sed -i 's/compileSdk = 37/compileSdk = 36/' "$BUILD_FILE"
+          sed -i 's/targetSdk = 37/targetSdk = 36/' "$BUILD_FILE"
+          grep -F 'versionCode = 300' "$BUILD_FILE"
+          grep -F 'versionName = "3.0.0"' "$BUILD_FILE"
+          grep -F 'compileSdk = 36' "$BUILD_FILE"
+          grep -F 'targetSdk = 36' "$BUILD_FILE"
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -119,9 +124,8 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
           sdkmanager \
-            'platforms;android-37' \
+            'platforms;android-36' \
             'build-tools;36.0.0' \
             'ndk;29.0.14206865' \
             'cmake;3.22.1'
@@ -198,8 +202,8 @@ jobs:
             echo 'versionCode=300'
             echo 'versionName=3.0.0'
             echo 'applicationId=com.autonomousdiagnosis.app'
-            echo 'compileSdk=37'
-            echo 'targetSdk=37'
+            echo 'compileSdk=36'
+            echo 'targetSdk=36'
             echo 'minSdk=26'
             echo 'ndk=29.0.14206865'
             echo 'ncnn=20260526-android-vulkan'
