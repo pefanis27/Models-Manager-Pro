@@ -1,0 +1,267 @@
+name: Autonomous Diagnosis v3.0.1 Camera Hotfix APK
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-final-apk-20260818
+    paths:
+      - 'FINAL_BUILD_TRIGGER_V301.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autonomous-diagnosis-v301-hotfix
+  cancel-in-progress: true
+
+jobs:
+  build-v301-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout final build branch
+        uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-final-apk-20260818
+
+      - name: Publish workflow run id immediately
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p tool_payload
+          echo "$GITHUB_RUN_ID" > tool_payload/final_v301_RUN_ID.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/final_v301_RUN_ID.txt
+          if git diff --cached --quiet; then
+            echo 'Run id file already current.'
+          else
+            git commit -m "[skip ci] publish v3.0.1 APK run id $GITHUB_RUN_ID"
+            git push origin HEAD:autonomous-diagnosis-final-apk-20260818
+          fi
+
+      - name: Reconstruct and verify Android source payload
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat \
+            final_android_payload/chunk_00 \
+            final_android_payload/chunk_01_0 \
+            final_android_payload/chunk_01_1 \
+            final_android_payload/chunk_01_2 \
+            final_android_payload/chunk_01_3 \
+            final_android_payload/chunk_02_0 \
+            final_android_payload/chunk_02_1 \
+            final_android_payload/chunk_02_2 \
+            final_android_payload/chunk_02_3 \
+            final_android_payload/chunk_03 \
+            final_android_payload/chunk_04_0 \
+            final_android_payload/chunk_04_1 \
+            final_android_payload/chunk_04_2 \
+            final_android_payload/chunk_04_3 \
+            final_android_payload/chunk_05_0 \
+            final_android_payload/chunk_05_1 \
+            final_android_payload/chunk_05_2 \
+            final_android_payload/chunk_05_3 \
+            final_android_payload/chunk_06 \
+            > /tmp/final_project_payload.tar.gz.b64
+          echo '57383e708dcbd095b3456ccab05ce3324d065c704aa5f9948efba9945f0b0f8b  /tmp/final_project_payload.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/final_project_payload.tar.gz.b64 > /tmp/final_project_payload.tar.gz
+          echo '31c9cadbadf9c5e22bce062b8361ba325ca54b33ef206a7e86971d51cce4866e  /tmp/final_project_payload.tar.gz' | sha256sum -c -
+          rm -rf final_android_project
+          mkdir -p final_android_project
+          tar -xzf /tmp/final_project_payload.tar.gz -C final_android_project
+          test -f final_android_project/app/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt
+          test -f final_android_project/app/src/main/cpp/native_detector.cpp
+
+      - name: Apply v3.0.1 camera inference and UI hotfix
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp autonomous_apk_build/v301_hotfix/native_detector.cpp final_android_project/app/src/main/cpp/native_detector.cpp
+          cp autonomous_apk_build/v301_hotfix/DetectionOverlayView.kt final_android_project/app/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt
+          cp autonomous_apk_build/v301_hotfix/TemporalConsensus.kt final_android_project/app/src/main/java/com/autonomousdiagnosis/app/TemporalConsensus.kt
+
+          sed -i 's/private const val CONFIDENCE_THRESHOLD = 0.55f/private const val CONFIDENCE_THRESHOLD = 0.65f/' \
+            final_android_project/app/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt
+
+          RES=final_android_project/app/src/main/res
+          mkdir -p "$RES/drawable" "$RES/mipmap-anydpi" "$RES/mipmap-anydpi-v26"
+          cp autonomous_apk_build/v301_hotfix/ic_launcher_foreground.xml "$RES/drawable/ic_launcher_foreground.xml"
+          cp autonomous_apk_build/v301_hotfix/ic_launcher_fallback.xml "$RES/mipmap-anydpi/ic_launcher.xml"
+          cp autonomous_apk_build/v301_hotfix/ic_launcher_fallback.xml "$RES/mipmap-anydpi/ic_launcher_round.xml"
+          cp autonomous_apk_build/v301_hotfix/ic_launcher.xml "$RES/mipmap-anydpi-v26/ic_launcher.xml"
+          cp autonomous_apk_build/v301_hotfix/ic_launcher.xml "$RES/mipmap-anydpi-v26/ic_launcher_round.xml"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path('final_android_project/app/src/main/AndroidManifest.xml')
+          text = manifest.read_text()
+          if 'android:icon=' not in text:
+              text = text.replace(
+                  '<application\n',
+                  '<application\n        android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"\n',
+                  1,
+              )
+          manifest.write_text(text)
+          PY
+
+          grep -F 'cast_float16_to_float32' final_android_project/app/src/main/cpp/native_detector.cpp
+          grep -F 'class_agnostic_nms' final_android_project/app/src/main/cpp/native_detector.cpp
+          grep -F 'CONFIDENCE_THRESHOLD = 0.65f' final_android_project/app/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt
+          ! grep -F 'panelPaint' final_android_project/app/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt
+          grep -F 'android:icon="@mipmap/ic_launcher"' final_android_project/app/src/main/AndroidManifest.xml
+
+      - name: Pin release configuration v3.0.1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BUILD_FILE=final_android_project/app/build.gradle.kts
+          sed -i 's/versionCode = 1/versionCode = 301/' "$BUILD_FILE"
+          sed -i 's/versionName = "1.0.0"/versionName = "3.0.1"/' "$BUILD_FILE"
+          sed -i 's/compileSdk = 37/compileSdk = 36/' "$BUILD_FILE"
+          sed -i 's/targetSdk = 37/targetSdk = 36/' "$BUILD_FILE"
+          grep -F 'versionCode = 301' "$BUILD_FILE"
+          grep -F 'versionName = "3.0.1"' "$BUILD_FILE"
+          grep -F 'compileSdk = 36' "$BUILD_FILE"
+          grep -F 'targetSdk = 36' "$BUILD_FILE"
+
+      - name: Migrate to AGP 9 built-in Kotlin
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          project = Path('final_android_project')
+          app_build = project / 'app/build.gradle.kts'
+          root_build = project / 'build.gradle.kts'
+          props = project / 'gradle.properties'
+
+          def strip_plugin(path):
+              if not path.exists(): return
+              lines = path.read_text().splitlines()
+              kept = [line for line in lines if not (
+                  'org.jetbrains.kotlin.android' in line or
+                  'kotlin-android' in line or
+                  'libs.plugins.kotlin.android' in line
+              )]
+              path.write_text('\n'.join(kept) + '\n')
+
+          def remove_block(text, name):
+              lines = text.splitlines(); out=[]; i=0
+              start = re.compile(r'^\s*' + re.escape(name) + r'\s*\{')
+              while i < len(lines):
+                  if not start.match(lines[i]):
+                      out.append(lines[i]); i += 1; continue
+                  depth = lines[i].count('{') - lines[i].count('}'); i += 1
+                  while i < len(lines) and depth > 0:
+                      depth += lines[i].count('{') - lines[i].count('}'); i += 1
+              return '\n'.join(out) + '\n'
+
+          strip_plugin(root_build); strip_plugin(app_build)
+          app_build.write_text(remove_block(app_build.read_text(), 'kotlinOptions'))
+          if props.exists():
+              kept = [line for line in props.read_text().splitlines()
+                      if not re.match(r'^\s*android\.(builtInKotlin|newDsl)\s*=', line)]
+              props.write_text('\n'.join(kept) + '\n')
+          combined = '\n'.join(p.read_text() for p in (root_build, app_build) if p.exists())
+          for forbidden in ('org.jetbrains.kotlin.android','kotlin-android','libs.plugins.kotlin.android'):
+              if forbidden in combined: raise SystemExit('Kotlin migration failed: ' + forbidden)
+          PY
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdkmanager \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;29.0.14206865' \
+            'cmake;3.22.1'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Download and verify ncnn 20260526 Android Vulkan
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/ncnn-sdk/unpacked
+          curl -L --fail --retry 3 \
+            -o /tmp/ncnn-sdk/ncnn-20260526-android-vulkan.zip \
+            https://github.com/Tencent/ncnn/releases/download/20260526/ncnn-20260526-android-vulkan.zip
+          echo '26909c92eed35afed4a966b5e9e503fcb0a529691ea3f910ec2c94a4fff52804  /tmp/ncnn-sdk/ncnn-20260526-android-vulkan.zip' | sha256sum -c -
+          unzip -q /tmp/ncnn-sdk/ncnn-20260526-android-vulkan.zip -d /tmp/ncnn-sdk/unpacked
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          base = Path('/tmp/ncnn-sdk/unpacked')
+          cands = list(base.rglob('arm64-v8a/lib/cmake/ncnn/ncnnConfig.cmake'))
+          if len(cands) != 1: raise SystemExit(f'Expected one ncnnConfig.cmake, got {len(cands)}')
+          package_root = cands[0].parents[4]
+          dest = Path('final_android_project/app/src/main/cpp/ncnn')
+          if dest.exists(): shutil.rmtree(dest)
+          shutil.copytree(package_root, dest)
+          PY
+
+      - name: Verify placeholder model policy
+        shell: bash
+        run: |
+          set -euxo pipefail
+          PARAM=final_android_project/app/src/main/assets/autonomous_diagnosis.ncnn.param
+          BIN=final_android_project/app/src/main/assets/autonomous_diagnosis.ncnn.bin
+          test "$(stat -c%s "$PARAM")" -eq 11
+          test "$(stat -c%s "$BIN")" -eq 11
+
+      - name: Build unsigned v3.0.1 release APK
+        shell: bash
+        working-directory: final_android_project
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Collect v3.0.1 APK and signing tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="$(find final_android_project/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)"
+          test -n "$APK"; test -f "$APK"
+          mkdir -p final_build_artifact/tools/lib
+          cp "$APK" final_build_artifact/AutonomousDiagnosis-v3.0.1-placeholder-unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" final_build_artifact/tools/
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" final_build_artifact/tools/
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/lib/apksigner.jar" final_build_artifact/tools/lib/
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" final_build_artifact/tools/
+          chmod +x final_build_artifact/tools/zipalign final_build_artifact/tools/apksigner final_build_artifact/tools/aapt2
+          {
+            echo 'Autonomous Diagnosis Android v3.0.1'
+            echo 'versionCode=301'
+            echo 'versionName=3.0.1'
+            echo 'applicationId=com.autonomousdiagnosis.app'
+            echo 'compileSdk=36'
+            echo 'targetSdk=36'
+            echo 'minSdk=26'
+            echo 'hotfix=FP16 output normalization + class-agnostic NMS + flood guard + no black panels + launcher icon'
+            echo 'MODEL=PLACEHOLDER ONLY; real trained NCNN model injected after build'
+            echo "github_run_id=$GITHUB_RUN_ID"
+          } > final_build_artifact/BUILD_INFO.txt
+
+      - name: Upload v3.0.1 build substrate
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-v3.0.1-camera-hotfix-substrate
+          path: final_build_artifact/
+          if-no-files-found: error
+          retention-days: 1
