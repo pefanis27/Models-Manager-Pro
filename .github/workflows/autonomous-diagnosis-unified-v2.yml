@@ -1,0 +1,157 @@
+name: Autonomous Diagnosis Unified v2 RELEASE
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  build-unified-v2:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Android project payload
+        shell: bash
+        run: |
+          mkdir -p autonomous_apk_build/project
+          cat \
+            autonomous_apk_build/chunks2/chunk_00 \
+            autonomous_apk_build/chunks2/chunk_01 \
+            autonomous_apk_build/chunks2/chunk_02 \
+            autonomous_apk_build/chunks2/chunk_03 \
+            autonomous_apk_build/chunks2/chunk_04 \
+            autonomous_apk_build/chunks2/chunk_05_0 \
+            autonomous_apk_build/chunks2/chunk_05_1_0 \
+            autonomous_apk_build/chunks3/chunk_00 \
+            autonomous_apk_build/chunks3/chunk_01 \
+            autonomous_apk_build/chunks3/chunk_02 \
+            autonomous_apk_build/chunks3/chunk_03 \
+            autonomous_apk_build/chunks3/chunk_04 \
+            autonomous_apk_build/chunks2/chunk_06 \
+            autonomous_apk_build/chunks2/chunk_07 \
+            autonomous_apk_build/chunks2/chunk_08 \
+            > autonomous_apk_build/project.tar.gz.b64
+          test "$(wc -c < autonomous_apk_build/project.tar.gz.b64)" -eq 40756
+          base64 -d autonomous_apk_build/project.tar.gz.b64 > autonomous_apk_build/project.tar.gz
+          echo "9f50304869e70b373b689c05a79e700e592dab237da120425feeb5e6b2f42acf  autonomous_apk_build/project.tar.gz" | sha256sum -c -
+          tar -xzf autonomous_apk_build/project.tar.gz -C autonomous_apk_build/project
+
+      - name: Reconstruct v1.4 baseline
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          patch -p1 --forward < ../hotfix_v111.patch
+          patch -p1 --forward < ../hotfix_v112.patch
+          patch -p1 --forward < ../hotfix_v130.patch
+          sed -i 's/versionCode = 4/versionCode = 130/' app/build.gradle.kts
+          sed -i 's/versionName = "1.1.2-ncnn-classifier-fix"/versionName = "1.3.0"/' app/build.gradle.kts
+          sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/' app/build.gradle.kts
+          sed -i 's/isShrinkResources = true/isShrinkResources = false/' app/build.gradle.kts
+          sed -i '/release {/a\            isDebuggable = false' app/build.gradle.kts
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/assets/models/models_manifest.json')
+          s = p.read_text().replace('"max_track_gap_ms": 2200', '"max_track_gap_ms": 6500')
+          p.write_text(s)
+          PY
+          grep -q '"max_track_gap_ms": 6500' app/src/main/assets/models/models_manifest.json
+          patch -p1 --forward < ../hotfix_v140.patch
+          grep -q 'versionCode = 140' app/build.gradle.kts
+
+      - name: Apply unified 11-class v2 overlay
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          cat \
+            ../unified_v200_chunks_final/chunk_00 \
+            ../unified_v200_chunks_final/chunk_01 \
+            ../unified_v200_chunks_final/chunk_02 \
+            ../unified_v200_chunks_final/chunk_03 \
+            ../unified_v200_chunks_final/chunk_04 \
+            ../unified_v200_chunks_final/chunk_05 \
+            ../unified_v200_chunks_final/chunk_06 \
+            ../unified_v200_chunks_final/chunk_07 \
+            ../unified_v200_chunks_final/chunk_08 \
+            ../unified_v200_chunks_final/chunk_09 \
+            ../unified_v200_chunks_final/chunk_10 \
+            ../unified_v200_chunks_final/chunk_11 \
+            ../unified_v200_chunks_final/chunk_12 \
+            ../unified_v200_chunks_final/chunk_13 \
+            ../unified_v200_chunks_final/chunk_14 \
+            ../unified_v200_chunks_final/chunk_15 \
+            ../unified_v200_chunks_final/chunk_16 \
+            ../unified_v200_chunks_final/chunk_17 \
+            ../unified_v200_chunks_final/chunk_18 \
+            ../unified_v200_chunks_final/chunk_19 \
+            > /tmp/unified_v200_overlay.tar.gz.b64
+          test "$(wc -c < /tmp/unified_v200_overlay.tar.gz.b64)" -eq 15436
+          base64 -d /tmp/unified_v200_overlay.tar.gz.b64 > /tmp/unified_v200_overlay.tar.gz
+          echo "3610392789df793bd9a53c15dd730447900d13a81edb9e67adff99e83c3b5536  /tmp/unified_v200_overlay.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/unified_v200_overlay.tar.gz
+          rm -f app/src/main/java/gr/uop/autonomousdiagnosis/ai/NcnnClassifier.kt
+          rm -rf app/src/main/assets/models/leaf_classifier app/src/main/assets/models/grape_classifier
+          mkdir -p app/src/main/assets/models/detector
+          printf 'placeholder' > app/src/main/assets/models/detector/model.ncnn.param
+          printf 'placeholder' > app/src/main/assets/models/detector/model.ncnn.bin
+          grep -q 'versionCode = 200' app/build.gradle.kts
+          grep -q 'versionName = "2.0.0"' app/build.gradle.kts
+          grep -q 'unified_disease_detector' app/src/main/assets/models/models_manifest.json
+          grep -q '"detector_confidence": 0.05' app/src/main/assets/models/models_manifest.json
+          grep -q 'Leaf_Black_Rot' app/src/main/assets/models/models_manifest.json
+          grep -q 'Grape_Powdery_Mildew' app/src/main/assets/models/models_manifest.json
+          ! grep -R 'leafClassifier\|grapeClassifier\|target_aware_nms' app/src/main/java app/src/main/cpp
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK NDK and CMake
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Download verified NCNN Android SDK
+        working-directory: autonomous_apk_build/project
+        run: python tools/fetch_ncnn_android_sdk.py
+
+      - name: Build unsigned unified v2 RELEASE APK
+        working-directory: autonomous_apk_build/project
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Verify v2 manifest
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$APK"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" dump xmltree "$APK" --file AndroidManifest.xml > release-manifest.txt
+          grep -q 'versionCode.*200' release-manifest.txt
+          grep -q 'versionName.*2.0.0' release-manifest.txt
+          if grep -q 'debuggable.*true' release-manifest.txt; then exit 1; fi
+          sha256sum "$APK" > release-apk-placeholder.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-v2.0.0-unified-unsigned-placeholder
+          path: |
+            autonomous_apk_build/project/app/build/outputs/apk/release/app-release-unsigned.apk
+            autonomous_apk_build/project/release-manifest.txt
+            autonomous_apk_build/project/release-apk-placeholder.sha256
+          if-no-files-found: error
+          retention-days: 1

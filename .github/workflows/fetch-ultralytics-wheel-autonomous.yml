@@ -1,0 +1,45 @@
+name: Fetch Ultralytics Wheel Autonomous
+
+on:
+  push:
+    branches: [autonomous-diagnosis-apk-build-20260816]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  BRANCH: autonomous-diagnosis-apk-build-20260816
+
+jobs:
+  fetch-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-apk-build-20260816
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download exact wheel
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf wheel_tmp
+          mkdir -p wheel_tmp tool_payload
+          python -m pip download --no-deps ultralytics==8.4.114 -d wheel_tmp
+          sha256sum wheel_tmp/*.whl | tee wheel_tmp/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ultralytics-8.4.114-wheel
+          path: wheel_tmp
+          retention-days: 1
+      - name: Publish run id for retrieval
+        shell: bash
+        run: |
+          echo "$GITHUB_RUN_ID" > tool_payload/ultralytics_84114_RUN_ID.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/ultralytics_84114_RUN_ID.txt
+          git commit -m "[skip ci] publish ultralytics wheel run id $GITHUB_RUN_ID"
+          git push origin HEAD:$BRANCH

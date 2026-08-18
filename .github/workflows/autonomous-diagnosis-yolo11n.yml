@@ -1,0 +1,26 @@
+name: Autonomous Diagnosis YOLO11n Asset
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  fetch-yolo11n:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download official Ultralytics YOLO11n
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 -o yolo11n.pt https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11n.pt
+          ls -lh yolo11n.pt
+          sha256sum yolo11n.pt | tee yolo11n.pt.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yolo11n-official-v8.4.0
+          path: |
+            yolo11n.pt
+            yolo11n.pt.sha256
+          retention-days: 1

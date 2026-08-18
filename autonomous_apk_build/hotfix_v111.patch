@@ -1,0 +1,266 @@
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -11,8 +11,8 @@
+         applicationId = "gr.uop.autonomousdiagnosis"
+         minSdk = 26
+         targetSdk = 36
+-        versionCode = 2
+-        versionName = "1.1.0-ncnn"
++        versionCode = 3
++        versionName = "1.1.1-ncnn-hotfix"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables.useSupportLibrary = true
+ 
+--- a/app/src/main/assets/models/models_manifest.json
++++ b/app/src/main/assets/models/models_manifest.json
+@@ -68,11 +68,11 @@
+   },
+   "diagnosis": {
+     "analysis_fps": 6.0,
+-    "detector_confidence": 0.55,
++    "detector_confidence": 0.25,
+     "detector_iou": 0.50,
+     "classification_confidence": 0.65,
+-    "min_quality": 50.0,
+-    "min_sharpness": 60.0,
++    "min_quality": 35.0,
++    "min_sharpness": 30.0,
+     "min_observations": 3,
+     "agreement": 0.70,
+     "temporal_confidence": 0.65,
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/MainActivity.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/MainActivity.kt
+@@ -12,6 +12,8 @@
+ import androidx.camera.core.Preview
+ import androidx.camera.lifecycle.ProcessCameraProvider
+ import androidx.core.content.ContextCompat
++import androidx.core.view.ViewCompat
++import androidx.core.view.WindowInsetsCompat
+ import gr.uop.autonomousdiagnosis.camera.ImageProxyConverter
+ import gr.uop.autonomousdiagnosis.databinding.ActivityMainBinding
+ import gr.uop.autonomousdiagnosis.diagnosis.MobileDiagnosisEngine
+@@ -42,6 +44,7 @@
+         super.onCreate(savedInstanceState)
+         binding = ActivityMainBinding.inflate(layoutInflater)
+         setContentView(binding.root)
++        applySystemBarInsets()
+         binding.startStopButton.isEnabled = false
+         binding.startStopButton.setOnClickListener { toggleAnalysis() }
+ 
+@@ -52,6 +55,35 @@
+         }
+     }
+ 
++    private fun applySystemBarInsets() {
++        val topBaseLeft = binding.topPanel.paddingLeft
++        val topBaseTop = binding.topPanel.paddingTop
++        val topBaseRight = binding.topPanel.paddingRight
++        val topBaseBottom = binding.topPanel.paddingBottom
++        val bottomBaseLeft = binding.bottomPanel.paddingLeft
++        val bottomBaseTop = binding.bottomPanel.paddingTop
++        val bottomBaseRight = binding.bottomPanel.paddingRight
++        val bottomBaseBottom = binding.bottomPanel.paddingBottom
++
++        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
++            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
++            binding.topPanel.setPadding(
++                topBaseLeft + bars.left,
++                topBaseTop + bars.top,
++                topBaseRight + bars.right,
++                topBaseBottom
++            )
++            binding.bottomPanel.setPadding(
++                bottomBaseLeft + bars.left,
++                bottomBaseTop,
++                bottomBaseRight + bars.right,
++                bottomBaseBottom + bars.bottom
++            )
++            insets
++        }
++        ViewCompat.requestApplyInsets(binding.root)
++    }
++
+     private fun initializeModels() {
+         binding.statusText.text = "Έλεγχος μοντέλων…"
+         modelExecutor.execute {
+@@ -116,7 +148,8 @@
+                                 } else {
+                                     "Αυτόνομη διάγνωση ενεργή · ποιότητα ${result.quality.score.toInt()}"
+                                 }
+-                                binding.metricsText.text = "FPS ${"%.1f".format(displayedFps)} · Objects ${result.activeTracks} · Diagnoses ${result.diagnosisCount} · AI ${result.inferenceMs} ms"
++                                binding.metricsText.text = "FPS ${"%.1f".format(displayedFps)} · Boxes ${result.overlays.size} · Tracks ${result.activeTracks} · Diagnoses ${result.diagnosisCount} · AI ${result.inferenceMs} ms"
++                                binding.diagnosticsText.text = result.diagnostics
+                             }
+                         }
+                     } catch (t: Throwable) {
+@@ -155,6 +188,7 @@
+             binding.startStopButton.text = getString(R.string.start)
+             binding.statusText.text = "Διάγνωση σε παύση"
+             binding.decisionText.text = "ΠΑΥΣΗ"
++            binding.diagnosticsText.text = "DET — · CLS —"
+             binding.overlayView.clear()
+         }
+     }
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/camera/ImageProxyConverter.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/camera/ImageProxyConverter.kt
+@@ -7,11 +7,11 @@
+ object ImageProxyConverter {
+     /**
+      * Converts CameraX RGBA_8888 output to an upright ARGB_8888 Bitmap.
+-     * CameraX packs plane 0 as A,R,G,B bytes. Using RGBA output moves the
+-     * expensive YUV->RGB conversion into CameraX's optimized pipeline.
++     * CameraX ImageAnalysis OUTPUT_IMAGE_FORMAT_RGBA_8888 exposes bytes in
++     * R, G, B, A order in increasing ByteBuffer index.
+      */
+     fun toBitmap(image: ImageProxy): Bitmap {
+-        require(image.format == android.graphics.PixelFormat.RGBA_8888 || image.planes.size == 1) {
++        require(image.format == android.graphics.PixelFormat.RGBA_8888 && image.planes.size == 1) {
+             "ImageProxyConverter expects CameraX OUTPUT_IMAGE_FORMAT_RGBA_8888"
+         }
+         val width = image.width
+@@ -20,16 +20,17 @@
+         val buffer = plane.buffer
+         val rowStride = plane.rowStride
+         val pixelStride = plane.pixelStride.coerceAtLeast(4)
++        val base = buffer.position()
+         val pixels = IntArray(width * height)
+ 
+         for (y in 0 until height) {
+-            val row = y * rowStride
++            val row = base + y * rowStride
+             for (x in 0 until width) {
+                 val offset = row + x * pixelStride
+-                val a = buffer.get(offset).toInt() and 0xFF
+-                val r = buffer.get(offset + 1).toInt() and 0xFF
+-                val g = buffer.get(offset + 2).toInt() and 0xFF
+-                val b = buffer.get(offset + 3).toInt() and 0xFF
++                val r = buffer.get(offset).toInt() and 0xFF
++                val g = buffer.get(offset + 1).toInt() and 0xFF
++                val b = buffer.get(offset + 2).toInt() and 0xFF
++                val a = buffer.get(offset + 3).toInt() and 0xFF
+                 pixels[y * width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+             }
+         }
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+@@ -9,6 +9,7 @@
+ import gr.uop.autonomousdiagnosis.model.ModelsManifest
+ import gr.uop.autonomousdiagnosis.model.OverlayItem
+ import gr.uop.autonomousdiagnosis.model.Prediction
++import gr.uop.autonomousdiagnosis.util.normalizedEntropy
+ import java.util.concurrent.ConcurrentHashMap
+ import kotlin.math.max
+ 
+@@ -21,7 +22,8 @@
+     val diagnosisCount: Int,
+     val inferenceMs: Long,
+     val headline: String,
+-    val rejected: Boolean
++    val rejected: Boolean,
++    val diagnostics: String
+ )
+ 
+ private data class PredictionCache(
+@@ -57,7 +59,8 @@
+             consensus.expire(timestampMs).forEach(::saveExpiredReview)
+             return FrameAnalysis(
+                 bitmap.width, bitmap.height, frameQuality, emptyList(), tracker.activeCount(timestampMs),
+-                sessionDiagnosisCount, elapsedMs(started), "ΕΠΑΝΕΞΕΤΑΣΗ · ${frameQuality.reason}", true
++                sessionDiagnosisCount, elapsedMs(started), "ΕΠΑΝΕΞΕΤΑΣΗ · ${frameQuality.reason}", true,
++                "Q FAIL · sharp=${frameQuality.sharpness.toInt()} · light=${frameQuality.brightness.toInt()} · contrast=${frameQuality.contrast.toInt()}"
+             )
+         }
+ 
+@@ -67,6 +70,9 @@
+         consensus.expire(timestampMs).forEach(::saveExpiredReview)
+ 
+         val overlays = ArrayList<OverlayItem>()
++        val diagnosticParts = mutableListOf<String>()
++        diagnosticParts += "DET ${detections.size} @${"%.2f".format(config.detectorConfidence)}"
++        var classifierRuns = 0
+         var classificationBudget = 1
+         val prioritized = tracked.sortedWith(
+             compareBy<gr.uop.autonomousdiagnosis.model.Detection> { predictionCache[it.trackId]?.timestampMs ?: Long.MIN_VALUE }
+@@ -86,9 +92,11 @@
+                 crop = ImagePreprocessor.cropExpanded(bitmap, detection.box)
+                 if (crop != null) {
+                     val cropQuality = qualityAnalyzer.analyze(crop)
+-                    if (cropQuality.score >= max(35f, config.minQuality * 0.70f)) {
++                    val cropThreshold = max(35f, config.minQuality * 0.70f)
++                    if (cropQuality.score >= cropThreshold) {
+                         val classifier = if (detection.domain == "leaf") models.leafClassifier else models.grapeClassifier
+                         val prediction = classifier.classify(crop)
++                        classifierRuns++
+                         currentPrediction = prediction
+                         predictionCache[detection.trackId] = PredictionCache(prediction, timestampMs, cropQuality.score)
+                         currentDecision = consensus.observe(
+@@ -102,8 +110,16 @@
+                             detection.confidence,
+                             timestampMs
+                         )
++                        val ranked = prediction.probabilities.entries.sortedByDescending { it.value }
++                        val second = ranked.getOrNull(1)?.value ?: 0f
++                        val entropy = normalizedEntropy(prediction.probabilities)
++                        diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ${prediction.label} ${(prediction.confidence * 100).toInt()}% H=${"%.2f".format(entropy)} M=${"%.2f".format((prediction.confidence - second).coerceAtLeast(0f))} Q=${cropQuality.score.toInt()}"
+                         classificationBudget--
++                    } else {
++                        diagnosticParts += "CLS ${detection.domain}#${detection.trackId} SKIP cropQ=${cropQuality.score.toInt()}<${cropThreshold.toInt()}"
+                     }
++                } else {
++                    diagnosticParts += "CLS ${detection.domain}#${detection.trackId} SKIP crop"
+                 }
+             }
+ 
+@@ -133,7 +149,10 @@
+             diagnosisCount = sessionDiagnosisCount,
+             inferenceMs = elapsedMs(started),
+             headline = headline,
+-            rejected = false
++            rejected = false,
++            diagnostics = if (diagnosticParts.size > 1) diagnosticParts.joinToString(" · ") else {
++                if (tracked.isEmpty()) "DET 0 · CLS idle" else "${diagnosticParts.firstOrNull().orEmpty()} · CLS cached/idle"
++            }
+         )
+     }
+ 
+--- a/app/src/main/res/layout/activity_main.xml
++++ b/app/src/main/res/layout/activity_main.xml
+@@ -9,7 +9,7 @@
+         android:id="@+id/previewView"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+-        app:implementationMode="performance"
++        app:implementationMode="compatible"
+         app:scaleType="fillCenter" />
+ 
+     <gr.uop.autonomousdiagnosis.ui.DiagnosisOverlayView
+@@ -18,6 +18,7 @@
+         android:layout_height="match_parent" />
+ 
+     <LinearLayout
++        android:id="@+id/topPanel"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+         android:layout_gravity="top"
+@@ -51,9 +52,21 @@
+             android:text="FPS — · Objects — · Diagnoses —"
+             android:textColor="#D8FFFFFF"
+             android:textSize="12sp" />
++
++        <TextView
++            android:id="@+id/diagnosticsText"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="3dp"
++            android:maxLines="3"
++            android:ellipsize="end"
++            android:text="DET — · CLS —"
++            android:textColor="#FFFFB74D"
++            android:textSize="11sp" />
+     </LinearLayout>
+ 
+     <LinearLayout
++        android:id="@+id/bottomPanel"
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+         android:layout_gravity="bottom"

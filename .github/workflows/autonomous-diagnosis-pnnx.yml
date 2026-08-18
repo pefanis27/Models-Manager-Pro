@@ -1,0 +1,39 @@
+name: Autonomous Diagnosis PNNX Tool
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  package-pnnx:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-apk-build-20260816
+      - name: Download official pnnx Linux release
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p pnnx_bundle tool_payload
+          curl -L --fail --retry 3 -o pnnx_bundle/pnnx-20260704-linux.zip https://github.com/pnnx/pnnx/releases/download/20260704/pnnx-20260704-linux.zip
+          echo '685ee1d718068809bdbbc7a9417fa4e2e98a9f2164e8ad9fad73f63377464066  pnnx_bundle/pnnx-20260704-linux.zip' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pnnx-20260704-linux-verified
+          path: pnnx_bundle
+          if-no-files-found: error
+          retention-days: 1
+      - name: Publish run id for retrieval
+        shell: bash
+        run: |
+          echo "$GITHUB_RUN_ID" > tool_payload/pnnx_RUN_ID.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/pnnx_RUN_ID.txt
+          git commit -m "[skip ci] publish pnnx run id $GITHUB_RUN_ID"
+          git push origin HEAD:autonomous-diagnosis-apk-build-20260816

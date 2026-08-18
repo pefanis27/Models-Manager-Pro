@@ -1,0 +1,43 @@
+name: Autonomous Diagnosis NCNN Python Wheels
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  package-wheels:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-apk-build-20260816
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download exact NCNN exporter Python wheels
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p wheels tool_payload
+          python -m pip download --no-deps pnnx==20260526 -d wheels
+          python -m pip download --no-deps ncnn -d wheels
+          sha256sum wheels/* | tee wheels/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ncnn-pnnx-python-wheels-20260526
+          path: wheels
+          if-no-files-found: error
+          retention-days: 1
+      - name: Publish run id for retrieval
+        shell: bash
+        run: |
+          echo "$GITHUB_RUN_ID" > tool_payload/ncnn_python_RUN_ID.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/ncnn_python_RUN_ID.txt
+          git commit -m "[skip ci] publish ncnn python run id $GITHUB_RUN_ID"
+          git push origin HEAD:autonomous-diagnosis-apk-build-20260816

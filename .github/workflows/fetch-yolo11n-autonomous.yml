@@ -1,0 +1,31 @@
+name: Fetch YOLO11n for Autonomous Diagnosis
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ultralytics and fetch YOLO11n
+        run: |
+          python -m pip install --quiet ultralytics==8.4.114
+          python - <<'PY'
+          from ultralytics import YOLO
+          m=YOLO('yolo11n.pt')
+          print(m.names)
+          PY
+          sha256sum yolo11n.pt > SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yolo11n-autonomous-verified
+          path: |
+            yolo11n.pt
+            SHA256.txt
+          retention-days: 1

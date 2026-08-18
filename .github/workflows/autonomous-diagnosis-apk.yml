@@ -1,0 +1,149 @@
+name: Autonomous Diagnosis Android RELEASE APK
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  build-release-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Android project payload
+        shell: bash
+        run: |
+          mkdir -p autonomous_apk_build/project
+          cat \
+            autonomous_apk_build/chunks2/chunk_00 \
+            autonomous_apk_build/chunks2/chunk_01 \
+            autonomous_apk_build/chunks2/chunk_02 \
+            autonomous_apk_build/chunks2/chunk_03 \
+            autonomous_apk_build/chunks2/chunk_04 \
+            autonomous_apk_build/chunks2/chunk_05_0 \
+            autonomous_apk_build/chunks2/chunk_05_1_0 \
+            autonomous_apk_build/chunks3/chunk_00 \
+            autonomous_apk_build/chunks3/chunk_01 \
+            autonomous_apk_build/chunks3/chunk_02 \
+            autonomous_apk_build/chunks3/chunk_03 \
+            autonomous_apk_build/chunks3/chunk_04 \
+            autonomous_apk_build/chunks2/chunk_06 \
+            autonomous_apk_build/chunks2/chunk_07 \
+            autonomous_apk_build/chunks2/chunk_08 \
+            > autonomous_apk_build/project.tar.gz.b64
+          test "$(wc -c < autonomous_apk_build/project.tar.gz.b64)" -eq 40756
+          base64 -d autonomous_apk_build/project.tar.gz.b64 > autonomous_apk_build/project.tar.gz
+          echo "9f50304869e70b373b689c05a79e700e592dab237da120425feeb5e6b2f42acf  autonomous_apk_build/project.tar.gz" | sha256sum -c -
+          tar -xzf autonomous_apk_build/project.tar.gz -C autonomous_apk_build/project
+
+      - name: Apply v1.1 camera and classifier fixes
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          patch -p1 --forward < ../hotfix_v111.patch
+          patch -p1 --forward < ../hotfix_v112.patch
+
+      - name: Apply v1.3.0 field fixes
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          patch -p1 --forward < ../hotfix_v130.patch
+          grep -q 'logical_scalar_count' app/src/main/cpp/ncnn_bridge.cpp
+          grep -q 'target_aware_nms' app/src/main/cpp/ncnn_bridge.cpp
+          grep -q 'set_light_mode(true)' app/src/main/cpp/ncnn_bridge.cpp
+          grep -q '2200L' app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+          grep -q 'setSafeVerticalRegion' app/src/main/java/gr/uop/autonomousdiagnosis/ui/DiagnosisOverlayView.kt
+          grep -q 'maxTrackGapMs: Long = 6500L' app/src/main/java/gr/uop/autonomousdiagnosis/model/ModelManifest.kt
+
+      - name: Configure v1.3.0 baseline release
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          sed -i 's/versionCode = 4/versionCode = 130/' app/build.gradle.kts
+          sed -i 's/versionName = "1.1.2-ncnn-classifier-fix"/versionName = "1.3.0"/' app/build.gradle.kts
+          sed -i 's/isMinifyEnabled = true/isMinifyEnabled = false/' app/build.gradle.kts
+          sed -i 's/isShrinkResources = true/isShrinkResources = false/' app/build.gradle.kts
+          sed -i '/release {/a\            isDebuggable = false' app/build.gradle.kts
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/assets/models/models_manifest.json')
+          s = p.read_text()
+          s = s.replace('"max_track_gap_ms": 2200', '"max_track_gap_ms": 6500')
+          p.write_text(s)
+          PY
+          grep -q 'versionCode = 130' app/build.gradle.kts
+          grep -q 'versionName = "1.3.0"' app/build.gradle.kts
+          grep -q 'isDebuggable = false' app/build.gradle.kts
+
+      - name: Apply v1.4.0 mobile-model runtime patch
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          patch -p1 --forward < ../hotfix_v140.patch
+          grep -q 'versionCode = 140' app/build.gradle.kts
+          grep -q 'versionName = "1.4.0"' app/build.gradle.kts
+          grep -q 'acceptanceConfidence' app/src/main/java/gr/uop/autonomousdiagnosis/model/ModelManifest.kt
+          grep -q '1200L' app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+          grep -q 'LOW<' app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+          grep -q '"input_width": 320' app/src/main/assets/models/models_manifest.json
+          grep -q '"acceptance_confidence": 0.75' app/src/main/assets/models/models_manifest.json
+          grep -q '"acceptance_confidence": 0.8' app/src/main/assets/models/models_manifest.json
+          grep -q '"detector_confidence": 0.1' app/src/main/assets/models/models_manifest.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK NDK and CMake
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Download verified NCNN Android SDK
+        working-directory: autonomous_apk_build/project
+        run: python tools/fetch_ncnn_android_sdk.py
+
+      - name: Build final unsigned v1.4.0 RELEASE APK with placeholder model binaries
+        working-directory: autonomous_apk_build/project
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Verify release manifest and checksum
+        shell: bash
+        working-directory: autonomous_apk_build/project
+        run: |
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$APK"
+          sha256sum "$APK" | tee release-apk-placeholder.sha256
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" dump xmltree "$APK" --file AndroidManifest.xml > release-manifest.txt
+          grep -q 'versionCode.*140' release-manifest.txt
+          grep -q 'versionName.*1.4.0' release-manifest.txt
+          if grep -q 'debuggable.*true' release-manifest.txt; then
+            echo 'ERROR: release APK is debuggable' >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-v1.4.0-unsigned-release-placeholder
+          path: |
+            autonomous_apk_build/project/app/build/outputs/apk/release/app-release-unsigned.apk
+            autonomous_apk_build/project/release-manifest.txt
+            autonomous_apk_build/project/release-apk-placeholder.sha256
+          if-no-files-found: error
+          retention-days: 1

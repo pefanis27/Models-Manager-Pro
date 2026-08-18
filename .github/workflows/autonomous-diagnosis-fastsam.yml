@@ -1,0 +1,23 @@
+name: Autonomous Diagnosis FastSAM Asset
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-apk-build-20260816
+  workflow_dispatch:
+
+jobs:
+  fetch-fastsam:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download official FastSAM-s
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 -o FastSAM-s.pt https://github.com/ultralytics/assets/releases/download/v8.4.0/FastSAM-s.pt
+          echo 'c9f78716a81c7aff0d608ccc73e1b82ab3aaad86005049f6a92106a0be6d0844  FastSAM-s.pt' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FastSAM-s-official-v8.4.0
+          path: FastSAM-s.pt
+          retention-days: 1

@@ -1,0 +1,3 @@
+Autonomous Diagnosis final Android build tool refresh
+2026-08-18
+Purpose: refresh verified pnnx/ncnn artifacts for final trained unified 11-class model.

@@ -1,0 +1,249 @@
+--- a/app/src/main/cpp/ncnn_bridge.cpp
++++ b/app/src/main/cpp/ncnn_bridge.cpp
+@@ -85,21 +85,45 @@
+     return inter / std::max(1e-9f, area_a + area_b - inter);
+ }
+ 
+-std::vector<DetectionRow> class_aware_nms(std::vector<DetectionRow> rows, float threshold) {
++float overlap_over_smaller(const DetectionRow& a, const DetectionRow& b) {
++    const float xx1 = std::max(a.x1, b.x1);
++    const float yy1 = std::max(a.y1, b.y1);
++    const float xx2 = std::min(a.x2, b.x2);
++    const float yy2 = std::min(a.y2, b.y2);
++    const float inter = std::max(0.f, xx2 - xx1) * std::max(0.f, yy2 - yy1);
++    const float area_a = std::max(0.f, a.x2 - a.x1) * std::max(0.f, a.y2 - a.y1);
++    const float area_b = std::max(0.f, b.x2 - b.x1) * std::max(0.f, b.y2 - b.y1);
++    return inter / std::max(1e-9f, std::min(area_a, area_b));
++}
++
++std::vector<DetectionRow> target_aware_nms(std::vector<DetectionRow> rows, float threshold) {
+     std::sort(rows.begin(), rows.end(), [](const DetectionRow& a, const DetectionRow& b) { return a.score > b.score; });
+     std::vector<DetectionRow> kept;
+     kept.reserve(std::min<size_t>(rows.size(), 128));
++    const float cross_class_iou = std::max(0.40f, threshold * 0.80f);
+     for (const auto& row : rows) {
+         bool suppressed = false;
+         for (const auto& accepted : kept) {
+-            if (row.class_id == accepted.class_id && iou(row, accepted) > threshold) {
+-                suppressed = true;
+-                break;
++            const float pair_iou = iou(row, accepted);
++            if (row.class_id == accepted.class_id) {
++                if (pair_iou > threshold) {
++                    suppressed = true;
++                    break;
++                }
++            } else {
++                // Leaf and Grape_Cluster are mutually exclusive target domains for the
++                // same physical region. If both heads fire on essentially the same
++                // object, retain only the higher-confidence proposal. This prevents a
++                // single leaf from spawning both a leaf and grape classifier track.
++                if (pair_iou > cross_class_iou || overlap_over_smaller(row, accepted) > 0.78f) {
++                    suppressed = true;
++                    break;
++                }
+             }
+         }
+         if (!suppressed) {
+             kept.push_back(row);
+-            if (kept.size() >= 64) break; // mirrors bounded live detections in desktop v4.0.43
++            if (kept.size() >= 64) break; // bounded live detections
+         }
+     }
+     return kept;
+@@ -168,6 +192,7 @@
+     }
+     UtfChars input(env, input_name), output(env, output_name);
+     ncnn::Extractor ex = state->detector.create_extractor();
++    ex.set_light_mode(true);
+     if (ex.input(input.c_str(), in) != 0) {
+         throw_runtime(env, "Detector NCNN input blob was rejected");
+         return nullptr;
+@@ -216,7 +241,7 @@
+         if (row.x2 > row.x1 && row.y2 > row.y1) proposals.push_back(row);
+     }
+ 
+-    const auto kept = class_aware_nms(std::move(proposals), std::max(0.f, std::min(1.f, static_cast<float>(iou_threshold))));
++    const auto kept = target_aware_nms(std::move(proposals), std::max(0.f, std::min(1.f, static_cast<float>(iou_threshold))));
+     jfloatArray result = env->NewFloatArray(static_cast<jsize>(kept.size() * 6));
+     if (!result) return nullptr;
+     std::vector<jfloat> flat;
+@@ -246,6 +271,7 @@
+     }
+     UtfChars input(env, input_name), output(env, output_name);
+     ncnn::Extractor ex = net->create_extractor();
++    ex.set_light_mode(true);
+     if (ex.input(input.c_str(), in) != 0) {
+         throw_runtime(env, "Classifier NCNN input blob was rejected");
+         return nullptr;
+@@ -255,13 +281,18 @@
+         throw_runtime(env, "Classifier NCNN output blob could not be extracted");
+         return nullptr;
+     }
+-    const size_t scalar_count = out.total() * static_cast<size_t>(std::max(1, out.elempack));
+-    if (out.elempack != 1 || scalar_count != static_cast<size_t>(class_count)) {
++    // NCNN Mat::total() may include allocator/alignment padding (for example a
++    // logical 6-value 1-D output can report storage for 8 floats). The classifier
++    // contract is the logical width of the 1-D Softmax tensor, not padded storage.
++    const size_t logical_scalar_count = out.dims == 1
++        ? static_cast<size_t>(out.w) * static_cast<size_t>(std::max(1, out.elempack))
++        : 0u;
++    if (out.dims != 1 || out.elempack != 1 || logical_scalar_count != static_cast<size_t>(class_count)) {
+         std::ostringstream oss;
+         oss << "Classifier NCNN output mismatch: dims=" << out.dims
+             << " w=" << out.w << " h=" << out.h << " d=" << out.d << " c=" << out.c
+-            << " elempack=" << out.elempack << " scalar_count=" << scalar_count
+-            << " expected=" << class_count;
++            << " elempack=" << out.elempack << " logical_count=" << logical_scalar_count
++            << " storage_total=" << out.total() << " expected=" << class_count;
+         throw_runtime(env, oss.str());
+         return nullptr;
+     }
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/diagnosis/MobileDiagnosisEngine.kt
+@@ -64,14 +64,16 @@
+             )
+         }
+ 
++        val detectorStarted = System.nanoTime()
+         val detections = models.detector.detect(bitmap, config.detectorConfidence, config.detectorIou)
++        val detectorMs = elapsedMs(detectorStarted)
+         val tracked = tracker.assign(detections, timestampMs)
+         tracked.forEach { consensus.markSeen(it.trackId, timestampMs) }
+         consensus.expire(timestampMs).forEach(::saveExpiredReview)
+ 
+         val overlays = ArrayList<OverlayItem>()
+         val diagnosticParts = mutableListOf<String>()
+-        diagnosticParts += "DET ${detections.size} @${"%.2f".format(config.detectorConfidence)}"
++        diagnosticParts += "DET ${detections.size} @${"%.2f".format(config.detectorConfidence)} ${detectorMs}ms"
+         var classifierRuns = 0
+         var classificationBudget = 1
+         val prioritized = tracked.sortedWith(
+@@ -83,7 +85,7 @@
+         for (detection in prioritized) {
+             processedIds += detection.trackId
+             val cache = predictionCache[detection.trackId]
+-            val due = cache == null || timestampMs - cache.timestampMs >= 650L
++            val due = cache == null || timestampMs - cache.timestampMs >= 2200L
+             var currentPrediction = cache?.prediction
+             var currentDecision = consensus.snapshot(detection.trackId)
+             var crop: Bitmap? = null
+@@ -96,7 +98,9 @@
+                     if (cropQuality.score >= cropThreshold) {
+                         val classifier = if (detection.domain == "leaf") models.leafClassifier else models.grapeClassifier
+                         try {
++                            val classifierStarted = System.nanoTime()
+                             val prediction = classifier.classify(crop)
++                            val classifierMs = elapsedMs(classifierStarted)
+                             classifierRuns++
+                             currentPrediction = prediction
+                             predictionCache[detection.trackId] = PredictionCache(prediction, timestampMs, cropQuality.score)
+@@ -114,7 +118,7 @@
+                             val ranked = prediction.probabilities.entries.sortedByDescending { it.value }
+                             val second = ranked.getOrNull(1)?.value ?: 0f
+                             val entropy = normalizedEntropy(prediction.probabilities)
+-                            diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ${prediction.label} ${(prediction.confidence * 100).toInt()}% H=${"%.2f".format(entropy)} M=${"%.2f".format((prediction.confidence - second).coerceAtLeast(0f))} Q=${cropQuality.score.toInt()}"
++                            diagnosticParts += "CLS ${detection.domain}#${detection.trackId} ${prediction.label} ${(prediction.confidence * 100).toInt()}% ${classifierMs}ms H=${"%.2f".format(entropy)} M=${"%.2f".format((prediction.confidence - second).coerceAtLeast(0f))} Q=${cropQuality.score.toInt()}"
+                         } catch (t: Throwable) {
+                             // A classifier failure must never hide a valid detector box.
+                             // Keep returning the frame overlays and expose the exact reason
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/ui/DiagnosisOverlayView.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/ui/DiagnosisOverlayView.kt
+@@ -16,6 +16,8 @@
+     attrs: AttributeSet? = null
+ ) : View(context, attrs) {
+     @Volatile private var analysis: FrameAnalysis? = null
++    @Volatile private var safeTopPx: Float = 0f
++    @Volatile private var safeBottomPx: Float = Float.MAX_VALUE
+     private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+         style = Paint.Style.STROKE
+         strokeWidth = 5f
+@@ -39,6 +41,12 @@
+         postInvalidateOnAnimation()
+     }
+ 
++    fun setSafeVerticalRegion(topPx: Float, bottomPx: Float) {
++        safeTopPx = topPx.coerceAtLeast(0f)
++        safeBottomPx = bottomPx.coerceAtLeast(safeTopPx + 1f)
++        postInvalidateOnAnimation()
++    }
++
+     override fun onDraw(canvas: Canvas) {
+         super.onDraw(canvas)
+         val frame = analysis ?: return
+@@ -48,6 +56,9 @@
+         val renderedH = frame.imageHeight * scale
+         val offsetX = (width - renderedW) / 2f
+         val offsetY = (height - renderedH) / 2f
++        val safeBottom = safeBottomPx.coerceAtMost(height.toFloat())
++        val saveCount = canvas.save()
++        canvas.clipRect(0f, safeTopPx.coerceAtMost(safeBottom), width.toFloat(), safeBottom)
+ 
+         frame.overlays.forEach { item ->
+             val source = item.detection.box
+@@ -78,7 +89,7 @@
+             val textWidth = textPaint.measureText(text)
+             val textHeight = textPaint.fontMetrics.run { bottom - top }
+             val left = box.left.coerceIn(8f, (width - textWidth - 24f).coerceAtLeast(8f))
+-            val baseline = (box.top - 12f).coerceAtLeast(textHeight + 8f)
++            val baseline = (box.top - 12f).coerceAtLeast(safeTopPx + textHeight + 8f)
+             backgroundPaint.color = Color.argb(205, Color.red(color), Color.green(color), Color.blue(color))
+             canvas.drawRoundRect(
+                 RectF(left - 8f, baseline - textHeight, left + textWidth + 8f, baseline + 8f),
+@@ -86,5 +97,6 @@
+             )
+             canvas.drawText(text, left, baseline - textPaint.fontMetrics.bottom, textPaint)
+         }
++        canvas.restoreToCount(saveCount)
+     }
+ }
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/MainActivity.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/MainActivity.kt
+@@ -47,6 +47,8 @@
+         applySystemBarInsets()
+         binding.startStopButton.isEnabled = false
+         binding.startStopButton.setOnClickListener { toggleAnalysis() }
++        binding.topPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateOverlaySafeRegion() }
++        binding.bottomPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateOverlaySafeRegion() }
+ 
+         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+             initializeModels()
+@@ -79,11 +81,18 @@
+                 bottomBaseRight + bars.right,
+                 bottomBaseBottom + bars.bottom
+             )
++            binding.root.post { updateOverlaySafeRegion() }
+             insets
+         }
+         ViewCompat.requestApplyInsets(binding.root)
+     }
+ 
++    private fun updateOverlaySafeRegion() {
++        val top = binding.topPanel.bottom.toFloat()
++        val bottom = binding.bottomPanel.top.toFloat()
++        if (bottom > top) binding.overlayView.setSafeVerticalRegion(top, bottom)
++    }
++
+     private fun initializeModels() {
+         binding.statusText.text = "Έλεγχος μοντέλων…"
+         modelExecutor.execute {
+--- a/app/src/main/java/gr/uop/autonomousdiagnosis/model/ModelManifest.kt
++++ b/app/src/main/java/gr/uop/autonomousdiagnosis/model/ModelManifest.kt
+@@ -14,7 +14,7 @@
+     val minObservations: Int = 3,
+     val agreement: Float = 0.70f,
+     val temporalConfidence: Float = 0.65f,
+-    val maxTrackGapMs: Long = 2200L,
++    val maxTrackGapMs: Long = 6500L,
+     val maxNormalizedEntropy: Float = 1.0f,
+     val candidateCoverage: Float = 0.90f
+ )
+@@ -110,7 +110,7 @@
+             minObservations = obj.optInt("min_observations", 3),
+             agreement = obj.optDouble("agreement", 0.70).toFloat(),
+             temporalConfidence = obj.optDouble("temporal_confidence", 0.65).toFloat(),
+-            maxTrackGapMs = obj.optLong("max_track_gap_ms", 2200L),
++            maxTrackGapMs = obj.optLong("max_track_gap_ms", 6500L),
+             maxNormalizedEntropy = obj.optDouble("max_normalized_entropy", 1.0).toFloat(),
+             candidateCoverage = obj.optDouble("candidate_coverage", 0.90).toFloat()
+         )
