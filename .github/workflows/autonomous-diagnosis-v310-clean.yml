@@ -1,0 +1,178 @@
+name: Autonomous Diagnosis v3.1.0 Clean YOLO26s 640 APK
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-final-apk-20260818
+    paths:
+      - 'V310_BUILD_TRIGGER.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autonomous-diagnosis-v310-clean
+  cancel-in-progress: true
+
+jobs:
+  build-v310-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout final build branch
+        uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-final-apk-20260818
+
+      - name: Publish workflow run id immediately
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p tool_payload
+          echo "$GITHUB_RUN_ID" > tool_payload/final_v310_RUN_ID.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/final_v310_RUN_ID.txt
+          if git diff --cached --quiet; then
+            echo 'Run id already current.'
+          else
+            git commit -m "[skip ci] publish v3.1.0 APK run id $GITHUB_RUN_ID"
+            git push origin HEAD:autonomous-diagnosis-final-apk-20260818
+          fi
+
+      - name: Reconstruct and verify clean v3.1.0 source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v310_clean_payload/part_00 v310_clean_payload/part_01 v310_clean_payload/part_02 > /tmp/v310_source.tar.gz.b64
+          echo 'c275802a960e933dc555e994c90d9035f2835cad9a2e995c89a607629206d9bc  /tmp/v310_source.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/v310_source.tar.gz.b64 > /tmp/v310_source.tar.gz
+          echo '6efaf644f5a141c01e8257dfb749da8534d82dc2eb6bba648d13a70f9b38ee0f  /tmp/v310_source.tar.gz' | sha256sum -c -
+          rm -rf v310_android_project
+          mkdir -p v310_android_project
+          tar -xzf /tmp/v310_source.tar.gz -C v310_android_project
+          test -f v310_android_project/app/src/main/cpp/native_detector.cpp
+          test -f v310_android_project/app/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt
+          test -f v310_android_project/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+
+      - name: Verify v3.1.0 model and UI contract
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=v310_android_project/app
+          grep -F 'versionCode = 310' "$APP/build.gradle.kts"
+          grep -F 'versionName = "3.1.0"' "$APP/build.gradle.kts"
+          grep -F 'compileSdk = 36' "$APP/build.gradle.kts"
+          grep -F 'targetSdk = 36' "$APP/build.gradle.kts"
+          grep -F 'constexpr int kTargetSize = 640;' "$APP/src/main/cpp/native_detector.cpp"
+          grep -F 'constexpr int kAnchors = 8400;' "$APP/src/main/cpp/native_detector.cpp"
+          grep -F 'unified_grapevine_yolo26s_640.ncnn.param' "$APP/src/main/cpp/native_detector.cpp"
+          grep -F 'cast_float16_to_float32' "$APP/src/main/cpp/native_detector.cpp"
+          grep -F 'domain_aware_nms' "$APP/src/main/cpp/native_detector.cpp"
+          grep -F 'class VideoDetectionTracker' "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          grep -F 'classId == 0 || classId == 6' "$APP/src/main/java/com/autonomousdiagnosis/app/DiseaseCatalog.kt"
+          grep -F 'android:icon="@mipmap/ic_launcher"' "$APP/src/main/AndroidManifest.xml"
+          ! grep -R -nE 'autonomous_diagnosis\.ncnn|5376|kTargetSize[[:space:]]*=[[:space:]]*512|TemporalConsensus|panelPaint' "$APP/src/main"
+          ! find "$APP/src/main/assets" -maxdepth 1 -type f -name '*.ncnn.*' | grep -q .
+
+      - name: Install build-only model placeholders
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ASSETS=v310_android_project/app/src/main/assets
+          mkdir -p "$ASSETS"
+          printf 'PLACEHOLDER' > "$ASSETS/unified_grapevine_yolo26s_640.ncnn.param"
+          printf 'PLACEHOLDER' > "$ASSETS/unified_grapevine_yolo26s_640.ncnn.bin"
+          test "$(stat -c%s "$ASSETS/unified_grapevine_yolo26s_640.ncnn.param")" -eq 11
+          test "$(stat -c%s "$ASSETS/unified_grapevine_yolo26s_640.ncnn.bin")" -eq 11
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdkmanager \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;29.0.14206865' \
+            'cmake;3.22.1'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Download and verify ncnn 20260526 Android Vulkan
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/ncnn-sdk/unpacked
+          curl -L --fail --retry 3 \
+            -o /tmp/ncnn-sdk/ncnn-20260526-android-vulkan.zip \
+            https://github.com/Tencent/ncnn/releases/download/20260526/ncnn-20260526-android-vulkan.zip
+          echo '26909c92eed35afed4a966b5e9e503fcb0a529691ea3f910ec2c94a4fff52804  /tmp/ncnn-sdk/ncnn-20260526-android-vulkan.zip' | sha256sum -c -
+          unzip -q /tmp/ncnn-sdk/ncnn-20260526-android-vulkan.zip -d /tmp/ncnn-sdk/unpacked
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          base=Path('/tmp/ncnn-sdk/unpacked')
+          cands=list(base.rglob('arm64-v8a/lib/cmake/ncnn/ncnnConfig.cmake'))
+          if len(cands)!=1: raise SystemExit(f'Expected one ncnnConfig.cmake, got {len(cands)}')
+          package_root=cands[0].parents[4]
+          dest=Path('v310_android_project/app/src/main/cpp/ncnn')
+          if dest.exists(): shutil.rmtree(dest)
+          shutil.copytree(package_root,dest)
+          if not (dest/'arm64-v8a/lib/cmake/ncnn/ncnnConfig.cmake').exists(): raise SystemExit('ncnn copy failed')
+          PY
+
+      - name: Build unsigned v3.1.0 release APK
+        shell: bash
+        working-directory: v310_android_project
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Collect v3.1.0 APK and signing tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="$(find v310_android_project/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)"
+          test -n "$APK"; test -f "$APK"
+          mkdir -p v310_build_artifact/tools/lib
+          cp "$APK" v310_build_artifact/AutonomousDiagnosis-v3.1.0-placeholder-unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" v310_build_artifact/tools/
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner" v310_build_artifact/tools/
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/lib/apksigner.jar" v310_build_artifact/tools/lib/
+          cp "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt2" v310_build_artifact/tools/
+          chmod +x v310_build_artifact/tools/zipalign v310_build_artifact/tools/apksigner v310_build_artifact/tools/aapt2
+          {
+            echo 'Autonomous Diagnosis Android v3.1.0'
+            echo 'versionCode=310'
+            echo 'versionName=3.1.0'
+            echo 'applicationId=com.autonomousdiagnosis.app'
+            echo 'compileSdk=36'
+            echo 'targetSdk=36'
+            echo 'minSdk=26'
+            echo 'model=Unified_Grapevine_Disease_Detector YOLO26s 640x640 / 11 classes'
+            echo 'video=sampled inference + IoU domain tracking + stable cached overlay + temporal consensus'
+            echo 'ui=no black label panels + adaptive launcher icon'
+            echo 'MODEL=PLACEHOLDER ONLY; real trained NCNN injected after build'
+            echo "github_run_id=$GITHUB_RUN_ID"
+          } > v310_build_artifact/BUILD_INFO.txt
+          sha256sum "$APK" > v310_build_artifact/APK_PLACEHOLDER_SHA256.txt
+
+      - name: Upload v3.1.0 build substrate
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-v3.1.0-clean-substrate
+          path: v310_build_artifact/
+          if-no-files-found: error
+          retention-days: 1
