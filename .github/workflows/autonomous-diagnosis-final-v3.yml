@@ -111,6 +111,98 @@ jobs:
           grep -F 'compileSdk = 36' "$BUILD_FILE"
           grep -F 'targetSdk = 36' "$BUILD_FILE"
 
+      - name: Migrate to AGP 9 built-in Kotlin
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          project = Path('final_android_project')
+          app_build = project / 'app/build.gradle.kts'
+          root_build = project / 'build.gradle.kts'
+          props = project / 'gradle.properties'
+
+          def strip_kotlin_android_plugin(path: Path):
+              if not path.exists():
+                  return
+              lines = path.read_text().splitlines()
+              kept = []
+              removed = []
+              for line in lines:
+                  compact = line.replace(' ', '')
+                  if ('org.jetbrains.kotlin.android' in line or
+                      'kotlin-android' in line or
+                      'libs.plugins.kotlin.android' in line):
+                      removed.append(line)
+                      continue
+                  kept.append(line)
+              path.write_text('\n'.join(kept) + '\n')
+              print(f'{path}: removed Kotlin Android plugin lines:', removed)
+
+          def remove_named_block(text: str, block_name: str):
+              lines = text.splitlines()
+              out = []
+              i = 0
+              removed_blocks = []
+              start_re = re.compile(r'^\s*' + re.escape(block_name) + r'\s*\{')
+              while i < len(lines):
+                  line = lines[i]
+                  if not start_re.match(line):
+                      out.append(line)
+                      i += 1
+                      continue
+                  block = [line]
+                  depth = line.count('{') - line.count('}')
+                  i += 1
+                  while i < len(lines) and depth > 0:
+                      block.append(lines[i])
+                      depth += lines[i].count('{') - lines[i].count('}')
+                      i += 1
+                  removed_blocks.append('\n'.join(block))
+              return '\n'.join(out) + '\n', removed_blocks
+
+          strip_kotlin_android_plugin(root_build)
+          strip_kotlin_android_plugin(app_build)
+
+          text = app_build.read_text()
+          text, removed = remove_named_block(text, 'kotlinOptions')
+          app_build.write_text(text)
+          if removed:
+              print('Removed legacy android.kotlinOptions block(s):')
+              for block in removed:
+                  print(block)
+
+          if props.exists():
+              original = props.read_text().splitlines()
+              kept = []
+              removed_props = []
+              for line in original:
+                  if re.match(r'^\s*android\.(builtInKotlin|newDsl)\s*=', line):
+                      removed_props.append(line)
+                  else:
+                      kept.append(line)
+              props.write_text('\n'.join(kept) + '\n')
+              print('Removed obsolete AGP migration properties:', removed_props)
+
+          all_gradle = '\n'.join(
+              p.read_text() for p in (root_build, app_build) if p.exists()
+          )
+          forbidden = ['org.jetbrains.kotlin.android', 'kotlin-android', 'libs.plugins.kotlin.android']
+          hits = [x for x in forbidden if x in all_gradle]
+          if hits:
+              raise SystemExit(f'Built-in Kotlin migration incomplete; forbidden plugin references remain: {hits}')
+          if 'kotlinOptions {' in app_build.read_text():
+              raise SystemExit('Built-in Kotlin migration incomplete; kotlinOptions block remains')
+
+          print('--- migrated root build.gradle.kts ---')
+          if root_build.exists():
+              print(root_build.read_text())
+          print('--- migrated app/build.gradle.kts ---')
+          print(app_build.read_text())
+          PY
+
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
