@@ -1,0 +1,4 @@
+Autonomous Diagnosis v3.0.1 camera hotfix final trigger
+reason=fix Android Vulkan FP16 output decoding, detection flood, black label panels, add launcher icon
+versionCode=301
+versionName=3.0.1
