@@ -1,60 +1,75 @@
 #include <jni.h>
 #include <android/asset_manager_jni.h>
 #include <android/log.h>
+#include <net.h>
+#include <gpu.h>
+#include <layer.h>
+#include <cpu.h>
 #include <algorithm>
 #include <cmath>
-#include <cstddef>
+#include <cfloat>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <vector>
-#include "net.h"
-#include "gpu.h"
+
+#define LOG_TAG "AutonomousDiagnosis"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
-constexpr const char* TAG="AutonomousDiagnosis";
 constexpr int kTargetSize = 640;
 constexpr int kNumClasses = 11;
+constexpr int kChannels = 4 + kNumClasses;
 constexpr int kAnchors = 8400;
-constexpr int kMaxObjects = 6;
-constexpr float kRoiBlackLineFraction=0.985f;
-constexpr int kBlackLevel=28;
+constexpr int kMaxObjects = 8;
+constexpr int kCandidateCap = 256;
+constexpr const char* kParamAsset = "diagnosis_yolo26s_640.ncnn.param";
+constexpr const char* kBinAsset = "diagnosis_yolo26s_640.ncnn.bin";
 
-const char* kClassNames[kNumClasses]={
-    "Leaf_Healthy","Leaf_Black_Rot","Leaf_Blight","Leaf_Downy_Mildew","Leaf_Esca","Leaf_Powdery_Mildew",
-    "Grape_Healthy","Grape_Black_Rot","Grape_Downy_Mildew","Grape_Gray_Mold","Grape_Powdery_Mildew"
+struct Object {
+    float x1=0.f, y1=0.f, x2=0.f, y2=0.f, score=0.f;
+    int label=-1;
 };
+struct Roi { int x=0,y=0,w=0,h=0; };
 
-struct Object { float x1,y1,x2,y2,score; int label; };
-struct Roi { int x1,y1,x2,y2; };
-
+std::unique_ptr<ncnn::Net> g_net;
 std::mutex g_mutex;
-std::shared_ptr<ncnn::Net> g_net;
-bool g_using_vulkan=false;
+bool g_logged_output=false;
 
-inline float area(const Object&o){return std::max(0.f,o.x2-o.x1)*std::max(0.f,o.y2-o.y1);}
-inline int domain(int label){return label<6?0:1;}
-inline float overlap_1d(float a1,float a2,float b1,float b2){return std::max(0.f,std::min(a2,b2)-std::max(a1,b1));}
-inline float axis_gap(float a1,float a2,float b1,float b2){return std::max(0.f,std::max(a1,b1)-std::min(a2,b2));}
-float iou(const Object&a,const Object&b){
-    const float inter=overlap_1d(a.x1,a.x2,b.x1,b.x2)*overlap_1d(a.y1,a.y2,b.y1,b.y2);
-    return inter/std::max(1e-9f,area(a)+area(b)-inter);
+inline int domain(int label) { return label >= 0 && label < 6 ? 0 : 1; }
+inline float area(const Object& o) { return std::max(0.f,o.x2-o.x1)*std::max(0.f,o.y2-o.y1); }
+float iou(const Object& a,const Object& b) {
+    const float x1=std::max(a.x1,b.x1), y1=std::max(a.y1,b.y1);
+    const float x2=std::min(a.x2,b.x2), y2=std::min(a.y2,b.y2);
+    const float inter=std::max(0.f,x2-x1)*std::max(0.f,y2-y1);
+    const float uni=area(a)+area(b)-inter;
+    return uni>0.f?inter/uni:0.f;
 }
-float containment(const Object&a,const Object&b){
-    const float inter=overlap_1d(a.x1,a.x2,b.x1,b.x2)*overlap_1d(a.y1,a.y2,b.y1,b.y2);
-    return inter/std::max(1e-9f,std::min(area(a),area(b)));
+float containment(const Object& a,const Object& b) {
+    const float x1=std::max(a.x1,b.x1), y1=std::max(a.y1,b.y1);
+    const float x2=std::min(a.x2,b.x2), y2=std::min(a.y2,b.y2);
+    const float inter=std::max(0.f,x2-x1)*std::max(0.f,y2-y1);
+    return inter/std::max(1.f,std::min(area(a),area(b)));
+}
+inline float overlap_1d(float a1,float a2,float b1,float b2) {
+    return std::max(0.f,std::min(a2,b2)-std::max(a1,b1));
+}
+inline float axis_gap(float a1,float a2,float b1,float b2) {
+    if(a2<b1) return b1-a2;
+    if(b2<a1) return a1-b2;
+    return 0.f;
 }
 
-void domain_aware_nms(std::vector<Object>& objects,float threshold){
+void domain_aware_nms(std::vector<Object>& objects,float threshold) {
     std::sort(objects.begin(),objects.end(),[](const Object&a,const Object&b){return a.score>b.score;});
-    std::vector<Object> kept;kept.reserve(objects.size());
-    for(const auto& candidate:objects){
-        bool reject=false;
-        for(const auto& accepted:kept){
+    std::vector<Object> kept; kept.reserve(kMaxObjects);
+    for(const auto& candidate:objects) {
+        bool suppress=false;
+        for(const auto& accepted:kept) {
             if(domain(candidate.label)!=domain(accepted.label)) continue;
-            if(iou(candidate,accepted)>threshold || containment(candidate,accepted)>=0.82f){reject=true;break;}
+            if(iou(candidate,accepted)>threshold || containment(candidate,accepted)>=0.82f) { suppress=true; break; }
         }
-        if(!reject) kept.push_back(candidate);
+        if(!suppress) kept.push_back(candidate);
         if(static_cast<int>(kept.size())>=kMaxObjects) break;
     }
     objects.swap(kept);
@@ -134,7 +149,7 @@ void suppress_obvious_fragments(std::vector<Object>& objects) {
 }
 
 inline bool near_black_rgba(const unsigned char* p) {
-    return std::max({p[0],p[1],p[2]})<=kBlackLevel;
+    return std::max({p[0],p[1],p[2]})<=28;
 }
 
 Roi content_roi(const unsigned char* rgba,int w,int h) {
@@ -144,138 +159,181 @@ Roi content_roi(const unsigned char* rgba,int w,int h) {
     auto row_black=[&](int y)->bool {
         int dark=0,total=0;
         for(int x=0;x<w;x+=sx){dark+=near_black_rgba(rgba+(static_cast<size_t>(y)*w+x)*4)?1:0;++total;}
-        return total>0 && static_cast<float>(dark)/total>=kRoiBlackLineFraction;
+        return total>0 && static_cast<float>(dark)/total>=0.985f;
     };
     auto col_black=[&](int x,int top,int bottom)->bool {
         int dark=0,total=0;
         for(int y=top;y<bottom;y+=sy){dark+=near_black_rgba(rgba+(static_cast<size_t>(y)*w+x)*4)?1:0;++total;}
-        return total>0 && static_cast<float>(dark)/total>=kRoiBlackLineFraction;
+        return total>0 && static_cast<float>(dark)/total>=0.985f;
     };
-    int top=0; const int maxRows=std::max(1,static_cast<int>(h*.45f));
-    while(top<maxRows && row_black(top)) ++top;
-    int bottom=h,scanned=0;
-    while(bottom>top && scanned<maxRows && row_black(bottom-1)){--bottom;++scanned;}
-    int left=0; const int maxCols=std::max(1,static_cast<int>(w*.45f));
-    while(left<maxCols && col_black(left,top,bottom)) ++left;
-    int right=w;scanned=0;
-    while(right>left && scanned<maxCols && col_black(right-1,top,bottom)){--right;++scanned;}
-    if(right-left<32 || bottom-top<32 || static_cast<long long>(right-left)*(bottom-top)<static_cast<long long>(w)*h*.18) return full;
-    return {left,top,right,bottom};
+    const int max_rows=std::max(1,static_cast<int>(h*0.45f));
+    int top=0; while(top<max_rows && row_black(top)) ++top;
+    int bottom=h, scanned=0; while(bottom>top && scanned<max_rows && row_black(bottom-1)){--bottom;++scanned;}
+    const int max_cols=std::max(1,static_cast<int>(w*0.45f));
+    int left=0; while(left<max_cols && col_black(left,top,bottom)) ++left;
+    int right=w; scanned=0; while(right>left && scanned<max_cols && col_black(right-1,top,bottom)){--right;++scanned;}
+    const int rw=right-left,rh=bottom-top;
+    if(rw<32 || rh<32 || static_cast<long long>(rw)*rh<static_cast<long long>(w)*h*18/100) return full;
+    return Roi{left,top,rw,rh};
 }
 
-ncnn::Mat to_float32_unpacked(const ncnn::Mat& src) {
-    ncnn::Mat unpacked=src;
-    if(src.elempack!=1) ncnn::convert_packing(src,unpacked,1);
-    if(unpacked.elemsize==4u) return unpacked;
-    ncnn::Mat fp32;
-    if(unpacked.elemsize==2u) ncnn::cast_float16_to_float32(unpacked,fp32);
-    else return ncnn::Mat();
-    return fp32;
+bool load_model(AAssetManager* manager,bool use_vulkan) {
+    auto net=std::make_unique<ncnn::Net>();
+    net->opt.num_threads=4;
+    net->opt.use_fp16_packed=true;
+    net->opt.use_fp16_storage=true;
+    net->opt.use_fp16_arithmetic=false;
+    net->opt.use_vulkan_compute=use_vulkan && ncnn::get_gpu_count()>0;
+    const int p=net->load_param(manager,kParamAsset);
+    const int m=net->load_model(manager,kBinAsset);
+    if(p!=0 || m!=0 || net->input_indexes().empty() || net->output_indexes().empty()) {
+        LOGE("Model load failed param=%d bin=%d",p,m); return false;
+    }
+    LOGI("YOLO26s 640 official NCNN loaded Vulkan=%d",net->opt.use_vulkan_compute?1:0);
+    g_logged_output=false; g_net=std::move(net); return true;
 }
 
-std::vector<Object> decode(const ncnn::Mat& raw,int source_w,int source_h,int roi_x,int roi_y,int roi_w,int roi_h,float confidence,float nms_threshold,float scale,int pad_left,int pad_top) {
-    ncnn::Mat out=to_float32_unpacked(raw);
-    if(out.empty()) return {};
-    if(out.dims!=2 || !((out.h==kNumClasses+4 && out.w==kAnchors)||(out.w==kNumClasses+4 && out.h==kAnchors))){
-        __android_log_print(ANDROID_LOG_ERROR,TAG,"Unexpected output dims=%d w=%d h=%d c=%d elemsize=%zu pack=%d",out.dims,out.w,out.h,out.c,out.elemsize,out.elempack);
+std::vector<Object> decode(
+    const ncnn::Mat& out,float confidence,float nms_threshold,float scale,
+    int pad_left,int pad_top,int roi_x,int roi_y,int image_w,int image_h) {
+    const bool channels_first=out.dims==2 && out.w==kAnchors && out.h==kChannels;
+    const bool anchors_first=out.dims==2 && out.w==kChannels && out.h==kAnchors;
+    if((!channels_first && !anchors_first) || out.elempack!=1 || out.elembits()!=32) {
+        LOGE("Invalid output shape d=%d w=%d h=%d c=%d bits=%d pack=%d",out.dims,out.w,out.h,out.c,out.elembits(),out.elempack);
         return {};
     }
-    const bool channels_rows=(out.h==kNumClasses+4);
-    auto value=[&](int channel,int anchor)->float{return channels_rows?out.row(channel)[anchor]:out.row(anchor)[channel];};
-    std::vector<Object> candidates;candidates.reserve(64);
-    for(int a=0;a<kAnchors;++a){
-        int best=-1;float score=confidence;
-        for(int c=0;c<kNumClasses;++c){const float p=value(c+4,a);if(p>score){score=p;best=c;}}
-        if(best<0) continue;
+    auto value=[&](int channel,int anchor)->float {
+        return channels_first ? out.row(channel)[anchor] : out.row(anchor)[channel];
+    };
+    std::vector<Object> candidates; candidates.reserve(32);
+    bool capped=false;
+    for(int a=0;a<kAnchors;++a) {
+        int best=-1; float score=-FLT_MAX;
+        for(int c=0;c<kNumClasses;++c) {
+            const float s=value(4+c,a); if(s>score){score=s;best=c;}
+        }
+        if(best<0 || !std::isfinite(score) || score<confidence) continue;
+        if(score>1.001f) { LOGE("Invalid probability %.5f",score); return {}; }
+
+        // Official Ultralytics YOLO26 NCNN export (end2end:false) outputs
+        // decoded CX,CY,W,H in pixels followed by 11 sigmoid class scores.
         const float cx=value(0,a), cy=value(1,a), bw=value(2,a), bh=value(3,a);
-        if(!std::isfinite(cx)||!std::isfinite(cy)||!std::isfinite(bw)||!std::isfinite(bh)||bw<=0.f||bh<=0.f) continue;
+        if(!std::isfinite(cx)||!std::isfinite(cy)||!std::isfinite(bw)||!std::isfinite(bh)) continue;
+        if(bw<4.f || bh<4.f || bw>kTargetSize*2.f || bh>kTargetSize*2.f) continue;
         const float raw_x1=cx-bw*0.5f, raw_y1=cy-bh*0.5f;
         const float raw_x2=cx+bw*0.5f, raw_y2=cy+bh*0.5f;
-        float x1=(raw_x1-pad_left)/scale+roi_x;
-        float y1=(raw_y1-pad_top)/scale+roi_y;
-        float x2=(raw_x2-pad_left)/scale+roi_x;
-        float y2=(raw_y2-pad_top)/scale+roi_y;
-        x1=std::max(0.f,std::min(static_cast<float>(source_w),x1));
-        x2=std::max(0.f,std::min(static_cast<float>(source_w),x2));
-        y1=std::max(0.f,std::min(static_cast<float>(source_h),y1));
-        y2=std::max(0.f,std::min(static_cast<float>(source_h),y2));
-        if(x2-x1<4.f || y2-y1<4.f) continue;
-        candidates.push_back({x1,y1,x2,y2,score,best});
-        if(candidates.size()>4000) break;
+        Object o;
+        o.x1=(raw_x1-pad_left)/scale+roi_x; o.y1=(raw_y1-pad_top)/scale+roi_y;
+        o.x2=(raw_x2-pad_left)/scale+roi_x; o.y2=(raw_y2-pad_top)/scale+roi_y;
+        o.x1=std::clamp(o.x1,0.f,static_cast<float>(image_w-1));
+        o.y1=std::clamp(o.y1,0.f,static_cast<float>(image_h-1));
+        o.x2=std::clamp(o.x2,0.f,static_cast<float>(image_w-1));
+        o.y2=std::clamp(o.y2,0.f,static_cast<float>(image_h-1));
+        o.score=score; o.label=best;
+        if(o.x2-o.x1<4.f || o.y2-o.y1<4.f) continue;
+        if(static_cast<int>(candidates.size())<kCandidateCap) candidates.push_back(o);
+        else capped=true;
     }
+    if(capped) LOGI("Candidate cap reached at conf %.3f; keeping best after suppression",confidence);
     domain_aware_nms(candidates,nms_threshold);
     suppress_obvious_fragments(candidates);
     return candidates;
 }
 } // namespace
 
-extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM*,void*) { return JNI_VERSION_1_6; }
-
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_autonomousdiagnosis_app_NativeDetector_nativeLoadModel(JNIEnv* env,jobject,jobject asset_manager,jboolean use_vulkan) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    AAssetManager* mgr=AAssetManager_fromJava(env,asset_manager);
-    if(!mgr) return JNI_FALSE;
-    auto net=std::make_shared<ncnn::Net>();
-    net->opt.num_threads=std::max(1,std::min(4,ncnn::get_big_cpu_count()));
-    net->opt.use_packing_layout=true;
-    net->opt.use_fp16_packed=true;
-    net->opt.use_fp16_storage=true;
-    net->opt.use_fp16_arithmetic=true;
-    net->opt.use_vulkan_compute=use_vulkan && ncnn::get_gpu_count()>0;
-    if(net->load_param(mgr,"diagnosis_yolo26s_640.ncnn.param")!=0 || net->load_model(mgr,"diagnosis_yolo26s_640.ncnn.bin")!=0){
-        __android_log_print(ANDROID_LOG_ERROR,TAG,"Failed to load diagnosis NCNN model");
-        return JNI_FALSE;
-    }
-    g_using_vulkan=net->opt.use_vulkan_compute;
-    g_net=std::move(net);
-    __android_log_print(ANDROID_LOG_INFO,TAG,"Model loaded target=640 output=15x8400 bbox=CXCYWH Vulkan=%d",g_using_vulkan?1:0);
-    return JNI_TRUE;
+extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM*,void*) { ncnn::create_gpu_instance(); return JNI_VERSION_1_6; }
+extern "C" JNIEXPORT void JNICALL JNI_OnUnload(JavaVM*,void*) {
+    std::lock_guard<std::mutex> lock(g_mutex); g_net.reset(); ncnn::destroy_gpu_instance();
 }
-
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_autonomousdiagnosis_app_NativeDetector_nativeInit(JNIEnv* env,jobject,jobject assets,jboolean vulkan) {
+    std::lock_guard<std::mutex> lock(g_mutex); g_net.reset();
+    AAssetManager* manager=AAssetManager_fromJava(env,assets);
+    return manager && load_model(manager,vulkan==JNI_TRUE) ? JNI_TRUE : JNI_FALSE;
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_autonomousdiagnosis_app_NativeDetector_nativeHasGpu(JNIEnv*,jobject) {
+    return ncnn::get_gpu_count()>0 ? JNI_TRUE : JNI_FALSE;
+}
 extern "C" JNIEXPORT void JNICALL
-Java_com_autonomousdiagnosis_app_NativeDetector_nativeUnloadModel(JNIEnv*,jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex);g_net.reset();g_using_vulkan=false;
+Java_com_autonomousdiagnosis_app_NativeDetector_nativeClose(JNIEnv*,jobject) {
+    std::lock_guard<std::mutex> lock(g_mutex); g_net.reset();
 }
-
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_autonomousdiagnosis_app_NativeDetector_nativeUsingVulkan(JNIEnv*,jobject) { return g_using_vulkan?JNI_TRUE:JNI_FALSE; }
 
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_com_autonomousdiagnosis_app_NativeDetector_nativeDetect(JNIEnv* env,jobject,jobject buffer,jint width,jint height,jfloat confidence,jfloat nms_threshold) {
+Java_com_autonomousdiagnosis_app_NativeDetector_nativeDetect(
+    JNIEnv* env,jobject,jobject rgba_buffer,jint image_w,jint image_h,jint row_stride,jfloat confidence,jfloat nms_threshold) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if(!g_net || width<=0 || height<=0) return env->NewFloatArray(0);
-    auto* rgba=static_cast<unsigned char*>(env->GetDirectBufferAddress(buffer));
-    if(!rgba) return env->NewFloatArray(0);
-    const Roi roi=content_roi(rgba,width,height);
-    const int rw=roi.x2-roi.x1,rh=roi.y2-roi.y1;
-    const float scale=std::min(static_cast<float>(kTargetSize)/rw,static_cast<float>(kTargetSize)/rh);
-    const int new_w=std::max(1,static_cast<int>(std::round(rw*scale)));
-    const int new_h=std::max(1,static_cast<int>(std::round(rh*scale)));
-    const int pad_left=(kTargetSize-new_w)/2,pad_top=(kTargetSize-new_h)/2;
-    ncnn::Mat src=ncnn::Mat::from_pixels_roi_resize(
-        rgba,ncnn::Mat::PIXEL_RGBA2RGB,width,height,roi.x1,roi.y1,rw,rh,new_w,new_h);
-    ncnn::Mat input(kTargetSize,kTargetSize,3,(size_t)4u,1);
-    input.fill(114.f);
-    for(int c=0;c<3;++c){
-        for(int y=0;y<new_h;++y){
-            const float* srow=src.channel(c).row(y);
-            float* drow=input.channel(c).row(y+pad_top)+pad_left;
-            std::copy(srow,srow+new_w,drow);
+    if(!g_net || !rgba_buffer || image_w<=0 || image_h<=0) return env->NewFloatArray(0);
+    auto* rgba=static_cast<unsigned char*>(env->GetDirectBufferAddress(rgba_buffer));
+    const jlong capacity=env->GetDirectBufferCapacity(rgba_buffer);
+    if(!rgba || row_stride<image_w*4 || capacity<static_cast<jlong>(row_stride)*image_h) return env->NewFloatArray(0);
+
+    std::vector<unsigned char> contiguous;
+    const unsigned char* pixels=rgba;
+    if(row_stride!=image_w*4) {
+        contiguous.resize(static_cast<size_t>(image_w)*image_h*4);
+        for(int y=0;y<image_h;++y) {
+            std::copy_n(rgba+static_cast<size_t>(y)*row_stride,static_cast<size_t>(image_w)*4,
+                        contiguous.data()+static_cast<size_t>(y)*image_w*4);
         }
+        pixels=contiguous.data();
     }
+
+    Roi roi=content_roi(pixels,image_w,image_h);
+    std::vector<unsigned char> roi_pixels;
+    const unsigned char* analysis_pixels=pixels;
+    if(roi.x!=0 || roi.y!=0 || roi.w!=image_w || roi.h!=image_h) {
+        roi_pixels.resize(static_cast<size_t>(roi.w)*roi.h*4);
+        for(int y=0;y<roi.h;++y) {
+            const auto* src=pixels+(static_cast<size_t>(roi.y+y)*image_w+roi.x)*4;
+            auto* dst=roi_pixels.data()+static_cast<size_t>(y)*roi.w*4;
+            std::copy_n(src,static_cast<size_t>(roi.w)*4,dst);
+        }
+        analysis_pixels=roi_pixels.data();
+    }
+
+    const float scale=std::min(static_cast<float>(kTargetSize)/roi.w,static_cast<float>(kTargetSize)/roi.h);
+    const int resized_w=std::max(1,static_cast<int>(std::round(roi.w*scale)));
+    const int resized_h=std::max(1,static_cast<int>(std::round(roi.h*scale)));
+    ncnn::Mat resized=ncnn::Mat::from_pixels_resize(analysis_pixels,ncnn::Mat::PIXEL_RGBA2RGB,roi.w,roi.h,resized_w,resized_h);
+    const int pad_w=kTargetSize-resized_w, pad_h=kTargetSize-resized_h;
+    const int pad_left=pad_w/2, pad_top=pad_h/2;
+    ncnn::Mat input;
+    ncnn::copy_make_border(resized,input,pad_top,pad_h-pad_top,pad_left,pad_w-pad_left,ncnn::BORDER_CONSTANT,114.f);
     const float norm[3]={1.f/255.f,1.f/255.f,1.f/255.f};
     input.substract_mean_normalize(nullptr,norm);
-    ncnn::Extractor ex=g_net->create_extractor();
-    ex.set_light_mode(true);
-    if(ex.input(0,input)!=0) return env->NewFloatArray(0);
-    ncnn::Mat raw;
-    if(ex.extract(0,raw)!=0) return env->NewFloatArray(0);
-    static bool logged=false;
-    if(!logged){__android_log_print(ANDROID_LOG_INFO,TAG,"Output dims=%d w=%d h=%d c=%d elemsize=%zu pack=%d",raw.dims,raw.w,raw.h,raw.c,raw.elemsize,raw.elempack);logged=true;}
-    auto objects=decode(raw,width,height,roi.x1,roi.y1,rw,rh,confidence,nms_threshold,scale,pad_left,pad_top);
-    std::vector<float> flat;flat.reserve(objects.size()*6);
-    for(const auto&o:objects){flat.push_back(o.x1);flat.push_back(o.y1);flat.push_back(o.x2);flat.push_back(o.y2);flat.push_back(o.score);flat.push_back(static_cast<float>(o.label));}
+
+    ncnn::Extractor ex=g_net->create_extractor(); ex.set_light_mode(true);
+    if(ex.input(g_net->input_indexes().front(),input)!=0) return env->NewFloatArray(0);
+    ncnn::Mat native_out;
+    if(ex.extract(g_net->output_indexes().front(),native_out)!=0 || native_out.empty()) return env->NewFloatArray(0);
+
+    ncnn::Mat unpacked=native_out;
+    if(unpacked.elempack!=1) {
+        ncnn::Mat tmp; ncnn::convert_packing(unpacked,tmp,1,g_net->opt);
+        if(tmp.empty()) return env->NewFloatArray(0); unpacked=tmp;
+    }
+    ncnn::Mat fp32=unpacked;
+    if(fp32.elembits()==16) {
+        ncnn::Mat tmp; ncnn::cast_float16_to_float32(fp32,tmp,g_net->opt);
+        if(tmp.empty()) return env->NewFloatArray(0); fp32=tmp;
+    } else if(fp32.elembits()!=32) return env->NewFloatArray(0);
+
+    if(!g_logged_output) {
+        LOGI("Output d=%d w=%d h=%d c=%d bits=%d pack=%d ROI=%d,%d %dx%d",
+             fp32.dims,fp32.w,fp32.h,fp32.c,fp32.elembits(),fp32.elempack,roi.x,roi.y,roi.w,roi.h);
+        g_logged_output=true;
+    }
+    const auto objects=decode(fp32,
+        std::clamp(static_cast<float>(confidence),0.10f,0.90f),
+        std::clamp(static_cast<float>(nms_threshold),0.20f,0.80f),
+        scale,pad_left,pad_top,roi.x,roi.y,image_w,image_h);
+    std::vector<jfloat> flat; flat.reserve(objects.size()*6);
+    for(const auto&o:objects) {
+        flat.push_back(o.x1); flat.push_back(o.y1); flat.push_back(o.x2); flat.push_back(o.y2);
+        flat.push_back(o.score); flat.push_back(static_cast<float>(o.label));
+    }
     jfloatArray result=env->NewFloatArray(static_cast<jsize>(flat.size()));
     if(result && !flat.empty()) env->SetFloatArrayRegion(result,0,static_cast<jsize>(flat.size()),flat.data());
     return result;
