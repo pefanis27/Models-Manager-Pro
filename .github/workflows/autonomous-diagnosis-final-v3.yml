@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: autonomous-diagnosis-final-v3
+  cancel-in-progress: true
+
 jobs:
   build-final-apk:
     runs-on: ubuntu-24.04
@@ -21,6 +25,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: autonomous-diagnosis-final-apk-20260818
+
+      - name: Publish workflow run id immediately
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p tool_payload
+          echo "$GITHUB_RUN_ID" > tool_payload/final_v3_RUN_ID.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/final_v3_RUN_ID.txt
+          if git diff --cached --quiet; then
+            echo 'Run id file already current.'
+          else
+            git commit -m "[skip ci] publish final v3 APK build run id $GITHUB_RUN_ID"
+            git push origin HEAD:autonomous-diagnosis-final-apk-20260818
+          fi
 
       - name: Reconstruct and verify Android source payload
         shell: bash
@@ -167,15 +187,3 @@ jobs:
           path: final_build_artifact/
           if-no-files-found: error
           retention-days: 1
-
-      - name: Publish final workflow run id
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p tool_payload
-          echo "$GITHUB_RUN_ID" > tool_payload/final_v3_RUN_ID.txt
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add tool_payload/final_v3_RUN_ID.txt
-          git commit -m "[skip ci] publish final v3 APK build run id $GITHUB_RUN_ID"
-          git push origin HEAD:autonomous-diagnosis-final-apk-20260818
