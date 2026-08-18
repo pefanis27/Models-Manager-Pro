@@ -46,6 +46,18 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          echo '--- individual payload chunk hashes ---'
+          sha256sum \
+            final_android_payload/chunk_00 \
+            final_android_payload/chunk_01 \
+            final_android_payload/chunk_02 \
+            final_android_payload/chunk_03 \
+            final_android_payload/chunk_04 \
+            final_android_payload/chunk_05_0 \
+            final_android_payload/chunk_05_1 \
+            final_android_payload/chunk_05_2 \
+            final_android_payload/chunk_05_3 \
+            final_android_payload/chunk_06
           cat \
             final_android_payload/chunk_00 \
             final_android_payload/chunk_01 \
