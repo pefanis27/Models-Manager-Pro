@@ -1,0 +1,4 @@
+Autonomous Diagnosis v3.2.0 diagnosis-only final build
+2026-08-18
+user-supplied official YOLO26s 640 NCNN
+corrected held-out test: 764 images
