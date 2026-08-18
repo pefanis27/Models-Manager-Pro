@@ -1,0 +1,40 @@
+name: Fetch Ultralytics Wheel Autonomous
+
+on:
+  push:
+    branches: [autonomous-diagnosis-apk-build-20260816]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-apk-build-20260816
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download exact wheel and encode chunks
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf tool_payload/ultralytics_84114_b64 wheel_tmp
+          mkdir -p tool_payload/ultralytics_84114_b64 wheel_tmp
+          python -m pip download --no-deps ultralytics==8.4.114 -d wheel_tmp
+          WHEEL=$(ls wheel_tmp/ultralytics-8.4.114-*.whl | head -1)
+          sha256sum "$WHEEL" > tool_payload/ultralytics_84114_b64/SHA256.txt
+          basename "$WHEEL" > tool_payload/ultralytics_84114_b64/FILENAME.txt
+          base64 -w 0 "$WHEEL" | split -b 350000 -d -a 3 - tool_payload/ultralytics_84114_b64/chunk_
+          wc -c tool_payload/ultralytics_84114_b64/chunk_* > tool_payload/ultralytics_84114_b64/CHUNKS.txt
+      - name: Commit encoded wheel
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tool_payload/ultralytics_84114_b64
+          git commit -m "[skip ci] cache ultralytics 8.4.114 wheel for autonomous diagnosis"
+          git push origin HEAD:autonomous-diagnosis-apk-build-20260816
