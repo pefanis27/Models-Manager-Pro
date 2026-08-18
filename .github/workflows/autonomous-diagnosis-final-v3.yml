@@ -5,8 +5,7 @@ on:
     branches:
       - autonomous-diagnosis-final-apk-20260818
     paths:
-      - 'final_android_payload/**'
-      - '.github/workflows/autonomous-diagnosis-final-v3.yml'
+      - 'FINAL_BUILD_TRIGGER.txt'
   workflow_dispatch:
 
 permissions:
@@ -49,10 +48,19 @@ jobs:
           echo '--- individual payload chunk hashes ---'
           sha256sum \
             final_android_payload/chunk_00 \
-            final_android_payload/chunk_01 \
-            final_android_payload/chunk_02 \
+            final_android_payload/chunk_01_0 \
+            final_android_payload/chunk_01_1 \
+            final_android_payload/chunk_01_2 \
+            final_android_payload/chunk_01_3 \
+            final_android_payload/chunk_02_0 \
+            final_android_payload/chunk_02_1 \
+            final_android_payload/chunk_02_2 \
+            final_android_payload/chunk_02_3 \
             final_android_payload/chunk_03 \
-            final_android_payload/chunk_04 \
+            final_android_payload/chunk_04_0 \
+            final_android_payload/chunk_04_1 \
+            final_android_payload/chunk_04_2 \
+            final_android_payload/chunk_04_3 \
             final_android_payload/chunk_05_0 \
             final_android_payload/chunk_05_1 \
             final_android_payload/chunk_05_2 \
@@ -60,10 +68,19 @@ jobs:
             final_android_payload/chunk_06
           cat \
             final_android_payload/chunk_00 \
-            final_android_payload/chunk_01 \
-            final_android_payload/chunk_02 \
+            final_android_payload/chunk_01_0 \
+            final_android_payload/chunk_01_1 \
+            final_android_payload/chunk_01_2 \
+            final_android_payload/chunk_01_3 \
+            final_android_payload/chunk_02_0 \
+            final_android_payload/chunk_02_1 \
+            final_android_payload/chunk_02_2 \
+            final_android_payload/chunk_02_3 \
             final_android_payload/chunk_03 \
-            final_android_payload/chunk_04 \
+            final_android_payload/chunk_04_0 \
+            final_android_payload/chunk_04_1 \
+            final_android_payload/chunk_04_2 \
+            final_android_payload/chunk_04_3 \
             final_android_payload/chunk_05_0 \
             final_android_payload/chunk_05_1 \
             final_android_payload/chunk_05_2 \
