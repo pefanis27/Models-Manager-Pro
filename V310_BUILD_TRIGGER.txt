@@ -1,0 +1,4 @@
+Autonomous Diagnosis v3.1.0 clean build
+model=Unified_Grapevine_Disease_Detector YOLO26s 640
+source_b64_sha256=c275802a960e933dc555e994c90d9035f2835cad9a2e995c89a607629206d9bc
+source_targz_sha256=6efaf644f5a141c01e8257dfb749da8534d82dc2eb6bba648d13a70f9b38ee0f
