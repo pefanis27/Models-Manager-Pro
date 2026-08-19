@@ -1,1 +1,1 @@
-monitor v3.4.0 smart camera build run
+monitor v3.4.0 smart camera build run retry
