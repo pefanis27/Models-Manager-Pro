@@ -1,0 +1,35 @@
+name: v340 run monitor
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-final-apk-20260818
+    paths:
+      - 'V340_MONITOR_TRIGGER.txt'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-v340-run-id:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-final-apk-20260818
+      - name: Find latest v3.4.0 build run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          RUN_ID="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/autonomous-diagnosis-v340-smart-camera.yml/runs?branch=autonomous-diagnosis-final-apk-20260818&per_page=5" --jq '.workflow_runs[0].id // empty')"
+          test -n "$RUN_ID"
+          mkdir -p tool_payload
+          printf '%s\n' "$RUN_ID" > tool_payload/v340_latest_run_id.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add tool_payload/v340_latest_run_id.txt
+          git commit -m "Publish latest v3.4.0 build run id" || exit 0
+          git push origin HEAD:autonomous-diagnosis-final-apk-20260818
