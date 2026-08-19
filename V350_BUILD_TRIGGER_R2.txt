@@ -1,0 +1,2 @@
+Autonomous Diagnosis v3.5.0 CPU-only 640 clean R2 build
+2026-08-19
