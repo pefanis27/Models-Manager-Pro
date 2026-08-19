@@ -1,0 +1,192 @@
+name: Autonomous Diagnosis v3.3.0 YOLO26n 224 APK
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-final-apk-20260818
+    paths:
+      - 'V330_BUILD_TRIGGER.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autonomous-diagnosis-v330-224
+  cancel-in-progress: true
+
+jobs:
+  build-v330-224:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout build branch
+        uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-final-apk-20260818
+
+      - name: Reconstruct verified Android base
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v310_clean_payload/part_00 v310_clean_payload/part_01 v310_clean_payload/part_02 > /tmp/v310_source.tar.gz.b64
+          echo 'c275802a960e933dc555e994c90d9035f2835cad9a2e995c89a607629206d9bc  /tmp/v310_source.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/v310_source.tar.gz.b64 > /tmp/v310_source.tar.gz
+          echo '6efaf644f5a141c01e8257dfb749da8534d82dc2eb6bba648d13a70f9b38ee0f  /tmp/v310_source.tar.gz' | sha256sum -c -
+          rm -rf v330_android_project
+          mkdir -p v330_android_project
+          tar -xzf /tmp/v310_source.tar.gz -C v330_android_project
+          APP=v330_android_project/app
+          cp autonomous_apk_build/v311_hotfix/MainActivity.kt "$APP/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt"
+          cp autonomous_apk_build/v311_hotfix/native_detector.cpp "$APP/src/main/cpp/native_detector.cpp"
+          cp autonomous_apk_build/v311_hotfix/VideoDetectionTracker.kt "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          cp autonomous_apk_build/v312_hotfix/native_detector.cpp "$APP/src/main/cpp/native_detector.cpp"
+          cp autonomous_apk_build/v312_hotfix/VideoDetectionTracker.kt "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          cp autonomous_apk_build/v312_hotfix/DetectionOverlayView.kt "$APP/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt"
+
+      - name: Apply verified v3.2.0 diagnosis base
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v320_patch/part_00 v320_patch/part_01 v320_patch/part_02 v320_patch/part_03_0 v320_patch/part_03_1 v320_patch/part_04 > /tmp/v320_patch.tar.gz.b64
+          echo 'a14483df6749487aafb423a1cf3e8e22562b367834c11427bb5d8588ff4a36e8  /tmp/v320_patch.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/v320_patch.tar.gz.b64 > /tmp/v320_patch.tar.gz
+          echo '775700743c479fea91c760a387c4d7bde3d758b6309e32c13ca9db24872a9d3f  /tmp/v320_patch.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v320_patch.tar.gz -C v330_android_project
+          cp autonomous_apk_build/v320_final_hotfix/native_detector.cpp v330_android_project/app/src/main/cpp/native_detector.cpp
+
+      - name: Reconstruct and apply verified v3.3.0 224 patch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v330_patch/part_00 v330_patch/part_01 v330_patch/part_02 v330_patch/part_03 > /tmp/v330_patch.tar.gz.b64
+          echo '25c3f10e4c47605eed5b366f624bbf75ba01fba210b0af6e491801806b8689f0  /tmp/v330_patch.tar.gz.b64' | sha256sum -c -
+          base64 -d /tmp/v330_patch.tar.gz.b64 > /tmp/v330_patch.tar.gz
+          echo 'd47c8b33b6b0ce2af1edbe3e0948c7bb31e9a16f651193907b5c200fb1b79d21  /tmp/v330_patch.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v330_patch.tar.gz -C v330_android_project
+
+      - name: Remove every old NCNN model asset
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ASSETS=v330_android_project/app/src/main/assets
+          rm -f "$ASSETS"/*.ncnn.param "$ASSETS"/*.ncnn.bin "$ASSETS"/MODEL_REQUIRED.txt
+          find "$ASSETS" -maxdepth 1 -type f -print
+
+      - name: Verify v3.3.0 224 diagnosis contract
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=v330_android_project/app
+          CPP="$APP/src/main/cpp/native_detector.cpp"
+          MAIN="$APP/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt"
+          TRACK="$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          OVER="$APP/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt"
+          grep -F 'versionCode = 330' "$APP/build.gradle.kts"
+          grep -F 'versionName = "3.3.0"' "$APP/build.gradle.kts"
+          grep -F 'constexpr int kTargetSize = 224;' "$CPP"
+          grep -F 'constexpr int kAnchors = 1029;' "$CPP"
+          grep -F 'diagnosis_yolo26n_224.ncnn.param' "$CPP"
+          grep -F 'diagnosis_yolo26n_224.ncnn.bin' "$CPP"
+          grep -F 'const float cx=value(0,a)' "$CPP"
+          grep -F 'net->opt.use_vulkan_compute=useVulkan && ncnn::get_gpu_count()>0;' "$CPP"
+          grep -F 'private const val DETECTION_CONFIDENCE = 0.25f' "$MAIN"
+          grep -F 'private const val IOU_THRESHOLD = 0.50f' "$MAIN"
+          grep -F 'private const val ANALYSIS_INTERVAL_MS = 50L' "$MAIN"
+          grep -F 'text = "Vulkan GPU"; setTextColor(Color.WHITE); isChecked = true' "$MAIN"
+          grep -F 'focusFrameDetections' "$TRACK"
+          grep -F 'private val dropoutGraceMs: Long = 220L' "$TRACK"
+          test "$(grep -c 'canvas.drawRoundRect' "$OVER")" -eq 1
+          test "$(grep -c 'canvas.drawRect' "$OVER" || true)" -eq 0
+          ! grep -q 'panelPaint\|outlinePaint' "$OVER"
+          grep -F 'android:icon="@mipmap/ic_launcher"' "$APP/src/main/AndroidManifest.xml"
+          ! grep -R -nE 'diagnosis_yolo26s_640|unified_grapevine_yolo26s_640|autonomous_diagnosis\.ncnn|kTargetSize[[:space:]]*=[[:space:]]*640|kAnchors[[:space:]]*=[[:space:]]*8400|kTargetSize[[:space:]]*=[[:space:]]*512|5376' "$APP/src/main" || exit 1
+
+      - name: Install build-only 224 model placeholders
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ASSETS=v330_android_project/app/src/main/assets
+          printf 'PLACEHOLDER' > "$ASSETS/diagnosis_yolo26n_224.ncnn.param"
+          printf 'PLACEHOLDER' > "$ASSETS/diagnosis_yolo26n_224.ncnn.bin"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Download and verify ncnn 20260526 Android Vulkan
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/ncnn-sdk/unpacked
+          curl -L --fail --retry 3 -o /tmp/ncnn-sdk/ncnn.zip https://github.com/Tencent/ncnn/releases/download/20260526/ncnn-20260526-android-vulkan.zip
+          echo '26909c92eed35afed4a966b5e9e503fcb0a529691ea3f910ec2c94a4fff52804  /tmp/ncnn-sdk/ncnn.zip' | sha256sum -c -
+          unzip -q /tmp/ncnn-sdk/ncnn.zip -d /tmp/ncnn-sdk/unpacked
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          base=Path('/tmp/ncnn-sdk/unpacked')
+          cands=list(base.rglob('arm64-v8a/lib/cmake/ncnn/ncnnConfig.cmake'))
+          if len(cands)!=1: raise SystemExit(f'Expected one ncnnConfig.cmake, got {len(cands)}')
+          root=cands[0].parents[4]
+          dest=Path('v330_android_project/app/src/main/cpp/ncnn')
+          if dest.exists(): shutil.rmtree(dest)
+          shutil.copytree(root,dest)
+          PY
+
+      - name: Build unsigned v3.3.0 release APK
+        shell: bash
+        working-directory: v330_android_project
+        run: |
+          set -euxo pipefail
+          gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Collect v3.3.0 substrate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="$(find v330_android_project/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)"
+          test -f "$APK"
+          BT="$ANDROID_SDK_ROOT/build-tools/36.0.0"
+          mkdir -p v330_artifact/tools/lib v330_artifact/tools/runtime-libs
+          cp "$APK" v330_artifact/AutonomousDiagnosis-v3.3.0-224-placeholder-unsigned.apk
+          cp "$BT/zipalign" "$BT/apksigner" "$BT/aapt2" v330_artifact/tools/
+          cp "$BT/lib/apksigner.jar" v330_artifact/tools/lib/
+          ldd "$BT/zipalign" | awk '/=> \/.*\(/ {print $3}' | while read -r lib; do cp -L "$lib" v330_artifact/tools/runtime-libs/ || true; done
+          chmod +x v330_artifact/tools/zipalign v330_artifact/tools/apksigner v330_artifact/tools/aapt2
+          cat > v330_artifact/BUILD_INFO.txt <<EOF
+          Autonomous Diagnosis Android v3.3.0
+          versionCode=330
+          versionName=3.3.0
+          applicationId=com.autonomousdiagnosis.app
+          model=USER-SUPPLIED YOLO26n NCNN 224x224 / 11 classes / FP32
+          output=CX,CY,W,H + 11 sigmoid class probabilities / 1029 anchors
+          postprocess=diagnosis-focus max one leaf plus one grape; same-region conflict keeps strongest
+          tracker=fresh same-domain target replaces stale same-domain target; dropout bridge 220ms
+          camera_sampling=50ms (~20 sampled inference/s maximum); preview full-rate
+          vulkan=default ON when available + CPU fallback
+          MODEL=PLACEHOLDER ONLY; exact user NCNN injected after build
+          EOF
+
+      - name: Upload v3.3.0 build substrate
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-v3.3.0-224-substrate
+          path: v330_artifact/
+          if-no-files-found: error
+          retention-days: 1
