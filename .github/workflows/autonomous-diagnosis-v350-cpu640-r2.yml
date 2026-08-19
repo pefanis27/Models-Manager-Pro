@@ -1,0 +1,191 @@
+name: Autonomous Diagnosis v3.5.0 CPU 640 Clean APK R2
+
+on:
+  push:
+    branches:
+      - autonomous-diagnosis-final-apk-20260818
+    paths:
+      - 'V350_BUILD_TRIGGER_R2.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autonomous-diagnosis-v350-cpu640-r2
+  cancel-in-progress: true
+
+jobs:
+  build-v350-cpu640-r2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout build branch
+        uses: actions/checkout@v4
+        with:
+          ref: autonomous-diagnosis-final-apk-20260818
+
+      - name: Publish this run id
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p tool_payload
+          printf '%s\n' "$GITHUB_RUN_ID" > tool_payload/v350_r2_latest_run_id.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add tool_payload/v350_r2_latest_run_id.txt
+          git commit -m "Publish v3.5.0 R2 run id" || true
+          git push origin HEAD:autonomous-diagnosis-final-apk-20260818 || true
+
+      - name: Reconstruct clean Android source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v310_clean_payload/part_00 v310_clean_payload/part_01 v310_clean_payload/part_02 > /tmp/v310.b64
+          echo 'c275802a960e933dc555e994c90d9035f2835cad9a2e995c89a607629206d9bc  /tmp/v310.b64' | sha256sum -c -
+          base64 -d /tmp/v310.b64 > /tmp/v310.tar.gz
+          echo '6efaf644f5a141c01e8257dfb749da8534d82dc2eb6bba648d13a70f9b38ee0f  /tmp/v310.tar.gz' | sha256sum -c -
+          rm -rf v350_android_project && mkdir v350_android_project
+          tar -xzf /tmp/v310.tar.gz -C v350_android_project
+          APP=v350_android_project/app
+          cp autonomous_apk_build/v311_hotfix/MainActivity.kt "$APP/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt"
+          cp autonomous_apk_build/v311_hotfix/native_detector.cpp "$APP/src/main/cpp/native_detector.cpp"
+          cp autonomous_apk_build/v311_hotfix/VideoDetectionTracker.kt "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          cp autonomous_apk_build/v312_hotfix/native_detector.cpp "$APP/src/main/cpp/native_detector.cpp"
+          cp autonomous_apk_build/v312_hotfix/VideoDetectionTracker.kt "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          cp autonomous_apk_build/v312_hotfix/DetectionOverlayView.kt "$APP/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt"
+
+          cat v320_patch/part_00 v320_patch/part_01 v320_patch/part_02 v320_patch/part_03_0 v320_patch/part_03_1 v320_patch/part_04 > /tmp/v320.b64
+          echo 'a14483df6749487aafb423a1cf3e8e22562b367834c11427bb5d8588ff4a36e8  /tmp/v320.b64' | sha256sum -c -
+          base64 -d /tmp/v320.b64 > /tmp/v320.tar.gz
+          echo '775700743c479fea91c760a387c4d7bde3d758b6309e32c13ca9db24872a9d3f  /tmp/v320.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v320.tar.gz -C v350_android_project
+          cp autonomous_apk_build/v320_final_hotfix/native_detector.cpp "$APP/src/main/cpp/native_detector.cpp"
+
+          cat v330_patch/part_00 v330_patch/part_01 v330_patch/part_02 v330_patch/part_03 > /tmp/v330.b64
+          echo '25c3f10e4c47605eed5b366f624bbf75ba01fba210b0af6e491801806b8689f0  /tmp/v330.b64' | sha256sum -c -
+          base64 -d /tmp/v330.b64 > /tmp/v330.tar.gz
+          echo 'd47c8b33b6b0ce2af1edbe3e0948c7bb31e9a16f651193907b5c200fb1b79d21  /tmp/v330.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v330.tar.gz -C v350_android_project
+
+          cat v340_patch/part_00 v340_patch/part_01 v340_patch/part_02 v340_patch/part_03 v340_patch/part_04 v340_patch/part_05 v340_patch/part_06 > /tmp/v340.b64
+          echo '31680d482e475b16a26f6b3e16679d7179003035602980b6c84b0bc2f2cdfcf8  /tmp/v340.b64' | sha256sum -c -
+          base64 -d /tmp/v340.b64 > /tmp/v340.tar.gz
+          echo '2931119e4d0a887f2974688faa6e46f7df05f2212f41c684d8b485c54f5bf742  /tmp/v340.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v340.tar.gz -C v350_android_project
+
+          cp v350_patch/payload.tar.gz.b64 /tmp/v350.b64
+          echo '1b56a59171bfe16634d8d30a6c15326d897a88176d56bf6855056ab0e721601b  /tmp/v350.b64' | sha256sum -c -
+          base64 -d /tmp/v350.b64 > /tmp/v350.tar.gz
+          echo '6d12e72967d2cbc4bfd3a9796eeeeb0b7e81222920b58477bed1752c91e3aa0b  /tmp/v350.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/v350.tar.gz -C v350_android_project
+
+          # CPU ncnn 20260526 uses Net::opt.num_threads; Extractor has no set_num_threads API.
+          sed -i '/ex\.set_num_threads(4);/d' "$APP/src/main/cpp/native_detector.cpp"
+          rm -f "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          rm -f "$APP/src/main/java/com/autonomousdiagnosis/app/SmartCameraEvidenceSelector.kt"
+          rm -f "$APP/src/main/assets"/*.ncnn.param "$APP/src/main/assets"/*.ncnn.bin
+          rm -f "$APP/src/main/assets/NCNN224_RUN2_HELDOUT_AUDIT.json"
+
+      - name: Verify CPU-only 640 runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APP=v350_android_project/app
+          CPP="$APP/src/main/cpp/native_detector.cpp"
+          MAIN="$APP/src/main/java/com/autonomousdiagnosis/app/MainActivity.kt"
+          MAN="$APP/src/main/AndroidManifest.xml"
+          OVER="$APP/src/main/java/com/autonomousdiagnosis/app/DetectionOverlayView.kt"
+          STAB="$APP/src/main/java/com/autonomousdiagnosis/app/DiagnosisStabilizer.kt"
+          grep -F 'versionCode = 350' "$APP/build.gradle.kts"
+          grep -F 'versionName = "3.5.0"' "$APP/build.gradle.kts"
+          grep -F 'constexpr int kTargetSize = 640;' "$CPP"
+          grep -F 'constexpr int kAnchors = 8400;' "$CPP"
+          grep -F 'net->opt.num_threads=4;' "$CPP"
+          ! grep -q 'set_num_threads' "$CPP"
+          grep -F 'diagnosis_yolo26s_640.ncnn.param' "$CPP"
+          grep -F 'diagnosis_yolo26s_640.ncnn.bin' "$CPP"
+          grep -F 'void selectSingleTarget' "$CPP"
+          grep -F 'configChanges="orientation|screenSize|keyboardHidden"' "$MAN"
+          grep -F 'override fun onConfigurationChanged' "$MAIN"
+          grep -F 'setTargetRotation(rotation)' "$MAIN"
+          grep -F 'image.close()' "$MAIN"
+          grep -F 'minObservations: Int = 3' "$STAB"
+          test "$(grep -c 'canvas.drawRoundRect' "$OVER")" -eq 1
+          test "$(grep -c 'canvas.drawRect' "$OVER" || true)" -eq 0
+          test "$(grep -c 'uses-permission' "$MAN")" -eq 1
+          test ! -e "$APP/src/main/java/com/autonomousdiagnosis/app/VideoDetectionTracker.kt"
+          test ! -e "$APP/src/main/java/com/autonomousdiagnosis/app/SmartCameraEvidenceSelector.kt"
+          ! grep -RniE 'vulkan|gpuSwitch|nativeHasGpu|use_vulkan|create_gpu_instance|destroy_gpu_instance|diagnosis_yolo26n|run2|kTargetSize[[:space:]]*=[[:space:]]*224|kAnchors[[:space:]]*=[[:space:]]*1029' "$APP/src/main/java" "$APP/src/main/cpp" "$MAN"
+          ! grep -RniE 'WRITE_EXTERNAL_STORAGE|READ_EXTERNAL_STORAGE|READ_MEDIA_IMAGES|ImageCapture|MediaStore|FileOutputStream|compress\(Bitmap' "$APP/src/main"
+
+      - name: Install model placeholders
+        shell: bash
+        run: |
+          ASSETS=v350_android_project/app/src/main/assets
+          printf PLACEHOLDER > "$ASSETS/diagnosis_yolo26s_640.ncnn.param"
+          printf PLACEHOLDER > "$ASSETS/diagnosis_yolo26s_640.ncnn.bin"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build components
+        shell: bash
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;29.0.14206865' 'cmake;3.22.1'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Install ncnn 20260526 Android CPU-only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/ncnn-sdk/unpacked
+          curl -L --fail --retry 3 -o /tmp/ncnn-sdk/ncnn.zip https://github.com/Tencent/ncnn/releases/download/20260526/ncnn-20260526-android.zip
+          echo '85b18b875488585c2d21360430e0e54abb6c04aa88094b471c20208ab55ff796  /tmp/ncnn-sdk/ncnn.zip' | sha256sum -c -
+          unzip -q /tmp/ncnn-sdk/ncnn.zip -d /tmp/ncnn-sdk/unpacked
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          cands=list(Path('/tmp/ncnn-sdk/unpacked').rglob('arm64-v8a/lib/cmake/ncnn/ncnnConfig.cmake'))
+          if len(cands)!=1: raise SystemExit(f'Expected one ncnnConfig.cmake, got {len(cands)}')
+          root=cands[0].parents[4]
+          dest=Path('v350_android_project/app/src/main/cpp/ncnn')
+          if dest.exists(): shutil.rmtree(dest)
+          shutil.copytree(root,dest)
+          PY
+
+      - name: Build release APK
+        shell: bash
+        working-directory: v350_android_project
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Collect substrate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="$(find v350_android_project/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)"
+          test -f "$APK"
+          BT="$ANDROID_SDK_ROOT/build-tools/36.0.0"
+          mkdir -p v350_artifact/tools/lib v350_artifact/tools/runtime-libs
+          cp "$APK" v350_artifact/AutonomousDiagnosis-v3.5.0-CPU640-placeholder-unsigned.apk
+          cp "$BT/zipalign" "$BT/apksigner" "$BT/aapt2" v350_artifact/tools/
+          cp "$BT/lib/apksigner.jar" v350_artifact/tools/lib/
+          ldd "$BT/zipalign" | awk '/=> \/.*\(/ {print $3}' | while read -r lib; do cp -L "$lib" v350_artifact/tools/runtime-libs/ || true; done
+          chmod +x v350_artifact/tools/zipalign v350_artifact/tools/apksigner v350_artifact/tools/aapt2
+          printf '%s\n' 'v3.5.0 CPU-only 640; no Vulkan/GPU; single visible target; landscape configChanges handling; exact user model injected after build.' > v350_artifact/BUILD_INFO.txt
+
+      - name: Upload substrate
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutonomousDiagnosis-v3.5.0-CPU640-substrate-r2
+          path: v350_artifact/
+          if-no-files-found: error
+          retention-days: 1
